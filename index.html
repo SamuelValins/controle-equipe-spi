@@ -284,10 +284,9 @@
 
     <!-- Script de Integração do Azure Storage & Frequência -->
     <script>
-        const storageAccount = "dashboardclarobrasil";
-        
-        // Token SAS de longa duração fixado internamente (Válido até 2049) [2]
-        const MEU_TOKEN_FIXO = "?sv=2024-11-04&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2049-03-13T00:48:06Z&st=2026-03-12T16:33:06Z&spr=https&sig=%2Be5p6vRDQh2ObBQ74z55EC1sJHEymiTAcg%2BpZqAfdaw%3D";
+        // Marcadores que serão substituídos pelo GitHub Actions no Deploy
+        const storageAccount = "ACCOUNT_PLACEHOLDER";
+        const MEU_TOKEN_FIXO = "SAS_TOKEN_PLACEHOLDER";
 
         const dddMapping = {
             'Jorge': ['12', '13'],
@@ -422,17 +421,6 @@
                 badge.classList.replace('bg-emerald-600/20', 'bg-blue-600/20');
                 badge.classList.replace('text-emerald-400', 'text-blue-400');
             }
-        }
-
-        function obterDataFiltro() {
-            const mesAno = document.getElementById('filtroMesAno').value; 
-            if (!mesAno) return { ano: 2026, mes: 7, partitionKey: '202607' };
-            const [ano, mes] = mesAno.split('-').map(Number);
-            return {
-                ano,
-                mes,
-                partitionKey: mesAno.replace(/-/g, '')
-            };
         }
 
         async function carregarPainelSincronizado() {
@@ -671,6 +659,7 @@
                     const diaDate = new Date(configData.ano, configData.mes - 1, dia);
                     const isDomingo = diaDate.getDay() === 0;
 
+                    // Ajustado para TRANSPARENTE/AZUL BEM CLARO por padrão
                     let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
                     let innerSymbol = "•"; 
                     let occurrenceObject = null;
@@ -689,6 +678,7 @@
                         if (matchingOc) {
                             occurrenceObject = matchingOc;
                             if (matchingOc.Ocorrencia === "Presente") {
+                                // PINTA DE AZUL MAIS FORTE quando preenchido explicitamente como presente
                                 bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
                                 innerSymbol = "P";
                             } else if (matchingOc.Ocorrencia === "Falta") {
@@ -698,6 +688,7 @@
                                 bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
                                 innerSymbol = "A";
                             } else if (matchingOc.Ocorrencia === "Férias") {
+                                // Exibe a palavra "Ferias" completa com fonte reduzida para caber no quadradinho
                                 bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
                                 innerSymbol = "Ferias";
                             }
@@ -793,7 +784,7 @@
             const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
             if (!tec) return;
 
-            // Operações alteradas para gravar na nova tabela do Azure "EquipeSPI" [2]
+            // Operações de frequência vinculadas diretamente à tabela unificada "EquipeSPI" [2]
             if (status === "Limpar") {
                 if (rowKeyExistente) {
                     const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
