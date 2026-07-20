@@ -1,7 +1,7 @@
 const { app } = require('@azure/functions');
 
 app.http('equipe', {
-    route: 'equipe/{*rest}', // Intercepta rotas dinâmicas do Table Storage
+    route: 'equipe/{*rest}', // Captura caminhos dinâmicos com parênteses do Azure [2]
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     authLevel: 'anonymous',
     handler: async (request, context) => {
@@ -19,15 +19,17 @@ app.http('equipe', {
         const query = urlObj.search;
         const rest = request.params.rest || '';
 
-        // Monta o endpoint do Azure Table de forma segura
+        // Monta o endpoint do Azure Table de forma limpa e decodificada [2]
         let targetUrl = `https://${storageAccount}.table.core.windows.net/EquipeSPI`;
         if (rest) {
-            if (rest.startsWith('(')) {
-                targetUrl += rest;
+            const decodedRest = decodeURIComponent(rest);
+            if (decodedRest.startsWith('(')) {
+                targetUrl += decodedRest; // Evita barras extras antes do parênteses
             } else {
-                targetUrl += '/' + rest;
+                targetUrl += '/' + decodedRest;
             }
         }
+        
         targetUrl += query + (query ? '&' : '?') + sasToken.replace(/^\?/, '');
 
         const method = request.method;
