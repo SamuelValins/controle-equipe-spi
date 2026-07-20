@@ -5,12 +5,19 @@ app.http('equipe', {
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     authLevel: 'anonymous',
     handler: async (request, context) => {
-        const storageAccount = process.env.AZURE_STORAGE_ACCOUNT;
-        const sasToken = process.env.AZURE_SAS_TOKEN;
+        // Sanitização ultra-agressiva para limpar espaços, quebras de linha e aspas acidentais das chaves do Azure
+        const storageAccount = (process.env.AZURE_STORAGE_ACCOUNT || '')
+            .trim()
+            .replace(/^["']|["']$/g, '');
+
+        const sasToken = (process.env.AZURE_SAS_TOKEN || '')
+            .trim()
+            .replace(/^["']|["']$/g, '');
 
         if (!storageAccount || !sasToken) {
             return {
                 status: 500,
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ error: "Configurações de ambiente ausentes no Azure." })
             };
         }
@@ -30,7 +37,13 @@ app.http('equipe', {
             }
         }
         
-        targetUrl += query + (query ? '&' : '?') + sasToken.replace(/^\?/, '');
+        // Garante a junção limpa da Query e do Token SAS de forma estruturada
+        const cleanSas = sasToken.startsWith('?') ? sasToken : '?' + sasToken;
+        if (query) {
+            targetUrl += query + '&' + cleanSas.substring(1);
+        } else {
+            targetUrl += cleanSas;
+        }
 
         const method = request.method;
         const headers = {
@@ -57,9 +70,16 @@ app.http('equipe', {
                 body: resText
             };
         } catch (err) {
+            // Retorna detalhes ricos do ambiente para localizarmos o erro de rede
             return {
                 status: 500,
-                body: JSON.stringify({ error: err.message })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    error: err.message, 
+                    causa: err.cause ? err.cause.message : 'DNS ou Conexão Recusada',
+                    urlConsultada: targetUrl.split('?')[0] + '?[SAS_OCULTADO]',
+                    inicioToken: sasToken.substring(0, 15) + "..."
+                })
             };
         }
     }
