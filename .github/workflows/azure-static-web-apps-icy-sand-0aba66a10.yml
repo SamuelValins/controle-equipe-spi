@@ -19,6 +19,21 @@ jobs:
         with:
           submodules: true
           lfs: false
+
+      # Etapa de Injeção de Variáveis Adicionada aqui de forma segura (imune a bugs do caractere &)
+      - name: Inject Environment Variables
+        env:
+          STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          SAS_TOKEN: ${{ secrets.AZURE_SAS_TOKEN }}
+        run: |
+          node -e "
+          const fs = require('fs');
+          let html = fs.readFileSync('index.html', 'utf8');
+          html = html.replace('ACCOUNT_PLACEHOLDER', process.env.STORAGE_ACCOUNT);
+          html = html.replace('SAS_TOKEN_PLACEHOLDER', process.env.SAS_TOKEN);
+          fs.writeFileSync('index.html', html, 'utf8');
+          "
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
