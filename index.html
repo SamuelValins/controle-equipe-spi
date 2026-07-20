@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Equipe - Escala Mensal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --cor-primaria: #4a90e2;
+            --fundo-pagina: #0f172a;
+            --fundo-card: rgba(30, 41, 59, 0.7);
+            --cor-borda: rgba(255, 255, 255, 0.08);
+            --cor-texto-principal: #e2e8f0;
+            --cor-texto-secundario: #94a3b8;
+        }
+        body {
+            background-color: var(--fundo-pagina);
+            color: var(--cor-texto-principal);
+            background: radial-gradient(circle at top right, #1e293b, #0f172a) fixed;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(74, 144, 226, 0.3);
+            border-radius: 4px;
+        }
+        /* Estilo para fixar a primeira coluna de técnicos no scroll horizontal */
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            background-color: #1e293b !important;
+            z-index: 10;
+            box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.5);
+        }
+        .domingo-cell {
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(0, 0, 0, 0.15),
+                rgba(0, 0, 0, 0.15) 5px,
+                rgba(0, 0, 0, 0.3) 5px,
+                rgba(0, 0, 0, 0.3) 10px
+            );
+            color: #64748b;
+        }
+        .ddd-tag {
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: bold;
+            border: 1px solid var(--cor-borda);
+            background: rgba(255,255,255,0.05);
+            color: var(--cor-texto-secundario);
+            transition: all 0.2s;
+        }
+        .ddd-tag:hover { background: rgba(255,255,255,0.1); }
+        .ddd-tag.active {
+            background: #2563eb;
+            border-color: #3b82f6;
+            color: white;
+        }
+    </style>
+</head>
+<body class="p-4 custom-scrollbar">
+
+    <div class="max-w-[100vw] mx-auto space-y-4">
+        
+        <!-- Cabeçalho Principal -->
+        <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center p-5 bg-slate-800/80 backdrop-blur border border-slate-700/50 rounded-2xl gap-4">
+            <div>
+                <h1 class="text-xl font-black text-white uppercase tracking-tight">Escala de Frequência Mensal - SPI</h1>
+                <p class="text-xs text-slate-400 font-bold uppercase mt-0.5">Controle integrado na tabela EquipeSPI do Azure</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex flex-col">
+                    <label class="text-[9px] text-slate-400 font-bold uppercase">Mês de Referência</label>
+                    <input type="month" id="filtroMesAno" class="bg-slate-900 border border-slate-700 rounded-lg text-white px-3 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+        </header>
+
+        <!-- Filtros Rápidos -->
+        <section class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-800/40 border border-slate-700/40 rounded-xl">
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filtrar por Responsável</label>
+                <select id="filtroResponsavel" onchange="selecionarDddsPorResponsavel()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 text-xs">
+                    <option value="Todos">Todos os Responsáveis</option>
+                    <option value="Jorge">Jorge (DDD 12, 13)</option>
+                    <option value="Samuel">Samuel (DDD 14, 18)</option>
+                    <option value="Diógenes">Diógenes (DDD 16, 17)</option>
+                    <option value="Misael">Misael (DDD 15, 19)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filtrar por Empresa</label>
+                <select id="filtroEmpresa" onchange="aplicarFiltrosLocal()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 text-xs">
+                    <option value="Todos">Todas as Empresas</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">DDD (Multi-Seleção)</label>
+                <div id="containerFiltroDdd" class="flex flex-wrap gap-1 bg-slate-900 p-1.5 rounded-lg border border-slate-700 min-h-[38px]">
+                    <!-- Gerado via JS -->
+                </div>
+            </div>
+            <div class="flex items-end">
+                <button onclick="abrirModalCadastro()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-xs transition-colors">+ Cadastrar Técnico</button>
+            </div>
+        </section>
+
+        <!-- Painel Consolidado de Frequência por Empresa Hoje (Cabeçalho Acordeão) -->
+        <div class="space-y-1">
+            <div class="flex justify-between items-center p-4 bg-slate-800/80 border border-slate-700/50 rounded-xl cursor-pointer hover:bg-slate-750 transition-all select-none" onclick="togglePainelEmpresas()">
+                <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <span>🏢 Presenças por Empresa (Visão Geral Hoje)</span>
+                    <span id="badgeStatusEmpresas" class="bg-blue-600/20 text-blue-400 text-[9px] px-2 py-0.5 rounded font-bold uppercase transition-colors">Recolhido</span>
+                </h3>
+                <button id="btnToggleEmpresas" class="text-xs text-blue-400 hover:text-blue-300 font-bold uppercase">Expandir ▲</button>
+            </div>
+            <section id="painelResumoEmpresas" class="hidden grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-slate-800/20 border border-slate-700/40 rounded-xl transition-all">
+                <!-- Gerado Dinamicamente -->
+            </section>
+        </div>
+
+        <!-- Indicadores Resumidos (Responsivos aos Filtros) -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-blue-500 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Trabalhando Hoje</p>
+                    <p class="text-2xl font-black text-white mt-0.5" id="indicadorAtivos">0</p>
+                </div>
+                <span class="text-xs text-slate-500 font-mono" id="subIndicadorAtivos">De 0 ativos</span>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-red-500 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Total de Faltas no Mês</p>
+                    <p class="text-2xl font-black text-white mt-0.5" id="indicadorFaltasMes">0</p>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-amber-500 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Afastados Hoje (Férias/Atestado)</p>
+                    <p class="text-2xl font-black text-white mt-0.5" id="indicadorAfastados">0</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Painel Central: Grid de Frequência Horizontal -->
+        <main class="bg-slate-800/80 border border-slate-700/50 rounded-2xl shadow-2xl p-4 overflow-hidden">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-sm font-black text-white uppercase flex items-center gap-3">
+                    <span>📅 Quadro Geral de Escala Mensal</span>
+                    <span id="loadingSpinner" class="hidden spinner w-3 h-3 border-t-2 border-blue-500 rounded-full animate-spin"></span>
+                </h2>
+                <!-- Botão de escala na extremidade direita -->
+                <button id="btnToggleEscala" onclick="toggleLimiteMes()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded text-[10px] uppercase transition-all">Exibir Mês Completo</button>
+            </div>
+
+            <!-- Tabela de Alta Capacidade com Barra de Rolagem Horizontal Congelada -->
+            <div class="overflow-x-auto overflow-y-auto custom-scrollbar rounded-xl border border-slate-700/70 max-h-[72vh] lg:max-h-[calc(100vh-320px)]" style="max-width: 100%;">
+                <table class="min-w-full text-xs text-left border-collapse">
+                    <thead class="bg-slate-900 text-slate-400 uppercase font-bold sticky top-0 z-20" id="headerGridFrequencia">
+                        <!-- Gerado Dinamicamente -->
+                    </thead>
+                    <tbody id="corpoGridFrequencia" class="divide-y divide-slate-800 bg-slate-900/40">
+                        <!-- Gerado Dinamicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- MODAL 1: CADASTRO E EDIÇÃO DE TÉCNICO -->
+    <div id="modalCadastro" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+            <div class="bg-slate-900 p-4 flex justify-between items-center border-b border-slate-700">
+                <h3 class="text-white font-black uppercase text-xs" id="tituloModalCadastro">Registrar Técnico</h3>
+                <button onclick="fecharModalCadastro()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+            <form onsubmit="salvarTecnico(event)" class="p-6 space-y-4 text-xs">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome Completo</label>
+                    <input type="text" id="tecNome" required placeholder="Nome do Técnico" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Login</label>
+                        <input type="text" id="tecLogin" required placeholder="F00..." class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Empresa</label>
+                        <input type="text" id="tecEmpresa" required placeholder="Ex: DANLEX" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cidade Principal</label>
+                        <input type="text" id="tecCidade" required placeholder="SANTOS" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">DDD</label>
+                        <input type="text" id="tecDdd" required placeholder="13" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Celular</label>
+                        <input type="text" id="tecTelefone" required placeholder="13999998888" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status Geral</label>
+                        <select id="tecStatus" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                            <option value="Ativo">Ativo</option>
+                            <option value="Inativo">Inativo</option>
+                            <option value="Revogado">Revogado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="fecharModalCadastro()" class="px-4 py-2 bg-slate-700 text-slate-300 font-bold rounded-lg hover:bg-slate-600">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500">Salvar Cadastro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: GESTÃO DE STATUS DIÁRIO / ALTERAR FREQUÊNCIA -->
+    <div id="modalStatus" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+            <div class="bg-slate-900 p-4 flex justify-between items-center border-b border-slate-700">
+                <div>
+                    <h3 class="text-white font-black uppercase text-xs">Alterar Frequência</h3>
+                    <p id="descModalStatus" class="text-[10px] text-slate-400 uppercase mt-0.5"></p>
+                </div>
+                <button onclick="fecharModalStatus()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+            <form onsubmit="salvarAlteracaoFrequencia(event)" class="p-6 space-y-4 text-xs">
+                <input type="hidden" id="statusLogin">
+                <input type="hidden" id="statusDataAlvo">
+                <input type="hidden" id="statusRowKeyExistente">
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Selecione o Status</label>
+                    <select id="statusSelect" required onchange="toggleStatusPeriodo()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                        <option value="Limpar">⚪ Sem Registro / Limpar (Transparente)</option>
+                        <option value="Presente">🟢 Presente (Azul Forte)</option>
+                        <option value="Falta">🔴 Falta (Vermelho)</option>
+                        <option value="Atestado">🟡 Atestado (Amarelo)</option>
+                        <option value="Férias">⚪ Férias (Cinza)</option>
+                    </select>
+                </div>
+
+                <div id="statusDataUnicaContainer">
+                    <p class="text-[10px] text-slate-400">A alteração será aplicada especificamente no dia selecionado.</p>
+                </div>
+
+                <div id="statusPeriodoContainer" class="grid grid-cols-2 gap-2 hidden">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Início do Período</label>
+                        <input type="date" id="statusDataInicio" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Fim do Período</label>
+                        <input type="date" id="statusDataFim" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="fecharModalStatus()" class="px-4 py-2 bg-slate-700 text-slate-300 font-bold rounded-lg hover:bg-slate-600">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500">Salvar Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script de Integração do Azure Storage & Frequência -->
+    <script>
+        const storageAccount = "dashboardclarobrasil";
+        
+        // Token SAS de longa duração fixado internamente (Válido até 2049) [2]
+        const MEU_TOKEN_FIXO = "?sv=2024-11-04&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2049-03-13T00:48:06Z&st=2026-03-12T16:33:06Z&spr=https&sig=%2Be5p6vRDQh2ObBQ74z55EC1sJHEymiTAcg%2BpZqAfdaw%3D";
+
+        const dddMapping = {
+            'Jorge': ['12', '13'],
+            'Samuel': ['14', '18'],
+            'Diógenes': ['16', '17'],
+            'Misael': ['15', '19']
+        };
+
+        const todosDddsArray = ['12', '13', '14', '15', '16', '17', '18', '19'];
+        let selectedDddsSet = new Set(todosDddsArray); // Todos selecionados por padrão
+
+        let listaTecnicosGlobal = [];
+        let listaOcorrenciasGlobal = [];
+        let expandedTechLogins = new Set(); 
+        let exibirMesCompleto = false; 
+        let painelEmpresasExpandido = false; 
+
+        // Normalização de data para meia-noite local
+        function parseDateMidnight(dateStr) {
+            if (!dateStr) return null;
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        window.addEventListener('load', () => {
+            const hoje = new Date();
+            const mesFormatado = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('filtroMesAno').value = mesFormatado;
+
+            document.getElementById('filtroMesAno').addEventListener('change', carregarPainelSincronizado);
+            
+            renderizarFiltrosDdd();
+            carregarPainelSincronizado();
+        });
+
+        // --- SISTEMA DE FILTRO MULTI-DDD ---
+        function renderizarFiltrosDdd() {
+            const container = document.getElementById('containerFiltroDdd');
+            let html = `<button onclick="toggleTodosDdds()" class="ddd-tag ${selectedDddsSet.size === todosDddsArray.length ? 'active' : ''}">Todos</button>`;
+            
+            todosDddsArray.forEach(ddd => {
+                const isActive = selectedDddsSet.has(ddd);
+                html += `<button onclick="toggleDddFiltro('${ddd}')" class="ddd-tag ${isActive ? 'active' : ''}">${ddd}</button>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function toggleDddFiltro(ddd) {
+            if (selectedDddsSet.has(ddd)) {
+                selectedDddsSet.delete(ddd);
+            } else {
+                selectedDddsSet.add(ddd);
+            }
+            // Sincroniza o select de responsável de volta para "Todos" caso quebre a correspondência direta
+            document.getElementById('filtroResponsavel').value = "Todos";
+            
+            renderizarFiltrosDdd();
+            aplicarFiltrosLocal();
+        }
+
+        function toggleTodosDdds() {
+            if (selectedDddsSet.size === todosDddsArray.length) {
+                selectedDddsSet.clear();
+            } else {
+                selectedDddsSet = new Set(todosDddsArray);
+            }
+            document.getElementById('filtroResponsavel').value = "Todos";
+            renderizarFiltrosDdd();
+            aplicarFiltrosLocal();
+        }
+
+        function selecionarDddsPorResponsavel() {
+            const resp = document.getElementById('filtroResponsavel').value;
+            if (resp === "Todos") {
+                selectedDddsSet = new Set(todosDddsArray);
+            } else {
+                const dddsPermitidos = dddMapping[resp] || [];
+                selectedDddsSet = new Set(dddsPermitidos);
+            }
+            renderizarFiltrosDdd();
+            aplicarFiltrosLocal();
+        }
+
+        // --- COPIAR DADOS DO TÉCNICO ---
+        function copiarDadosTecnico(nome, login, cidade, ddd, telefone, btnElement) {
+            const formatado = `Nome: ${nome}\nLogin: ${login}\nCidade: ${cidade}\nDDD: ${ddd}\nTelefone: ${telefone}`;
+            navigator.clipboard.writeText(formatado).then(() => {
+                const orig = btnElement.innerText;
+                btnElement.innerText = "📋 Copiado!";
+                btnElement.style.backgroundColor = "#10b981";
+                setTimeout(() => {
+                    btnElement.innerText = orig;
+                    btnElement.style.backgroundColor = "";
+                }, 1500);
+            }).catch(err => {
+                alert("Erro ao copiar dados.");
+            });
+        }
+
+        // --- MUDANÇA DE DATA & CONEXÃO AZURE ---
+        function toggleLimiteMes() {
+            exibirMesCompleto = !exibirMesCompleto;
+            const btn = document.getElementById('btnToggleEscala');
+            if (exibirMesCompleto) {
+                btn.innerText = "Recolher para Hoje";
+                btn.classList.replace('bg-blue-600', 'bg-slate-600');
+                btn.classList.replace('hover:bg-blue-500', 'hover:bg-slate-500');
+            } else {
+                btn.innerText = "Exibir Mês Completo";
+                btn.classList.replace('bg-slate-600', 'bg-blue-600');
+                btn.classList.replace('hover:bg-slate-500', 'hover:bg-blue-500');
+            }
+            renderizarGridFrequencia();
+        }
+
+        function togglePainelEmpresas() {
+            painelEmpresasExpandido = !painelEmpresasExpandido;
+            const painel = document.getElementById('painelResumoEmpresas');
+            const btn = document.getElementById('btnToggleEmpresas');
+            const badge = document.getElementById('badgeStatusEmpresas');
+
+            if (painelEmpresasExpandido) {
+                painel.classList.remove('hidden');
+                btn.innerText = "Recolher ▲";
+                badge.innerText = "Expandido";
+                badge.classList.replace('bg-blue-600/20', 'bg-emerald-600/20');
+                badge.classList.replace('text-blue-400', 'text-emerald-400');
+            } else {
+                painel.classList.add('hidden');
+                btn.innerText = "Expandir ▲";
+                badge.innerText = "Recolhido";
+                badge.classList.replace('bg-emerald-600/20', 'bg-blue-600/20');
+                badge.classList.replace('text-emerald-400', 'text-blue-400');
+            }
+        }
+
+        function obterDataFiltro() {
+            const mesAno = document.getElementById('filtroMesAno').value; 
+            if (!mesAno) return { ano: 2026, mes: 7, partitionKey: '202607' };
+            const [ano, mes] = mesAno.split('-').map(Number);
+            return {
+                ano,
+                mes,
+                partitionKey: mesAno.replace(/-/g, '')
+            };
+        }
+
+        async function carregarPainelSincronizado() {
+            document.getElementById('loadingSpinner').classList.remove('hidden');
+            const configData = obterDataFiltro();
+
+            // Mapeamento alterado para ler os dados da nova tabela unificada "EquipeSPI" [2]
+            const urlTecnicos = `https://${storageAccount}.table.core.windows.net/EquipeSPI()?$filter=PartitionKey eq 'PERFIL'${MEU_TOKEN_FIXO.replace('?', '&')}`;
+            const urlOcorrencias = `https://${storageAccount}.table.core.windows.net/EquipeSPI()?$filter=PartitionKey eq '${configData.partitionKey}'${MEU_TOKEN_FIXO.replace('?', '&')}`;
+
+            try {
+                const [resTecs, resOcor] = await Promise.all([
+                    fetch(urlTecnicos, { headers: { 'Accept': 'application/json;odata=nometadata', 'x-ms-version': '2020-04-08' } }),
+                    fetch(urlOcorrencias, { headers: { 'Accept': 'application/json;odata=nometadata', 'x-ms-version': '2020-04-08' } })
+                ]);
+
+                if (resTecs.ok) {
+                    const data = await resTecs.json();
+                    listaTecnicosGlobal = data.value || [];
+                }
+                
+                if (resOcor.ok) {
+                    const data = await resOcor.json();
+                    listaOcorrenciasGlobal = data.value || [];
+                }
+
+                popularFiltrosDinamicos();
+                renderizarGridFrequencia();
+                calcularMetricasDia();
+
+            } catch (err) {
+                console.error("Erro na leitura das bases do Azure:", err);
+            } finally {
+                document.getElementById('loadingSpinner').classList.add('hidden');
+            }
+        }
+
+        function popularFiltrosDinamicos() {
+            const selectEmpresa = document.getElementById('filtroEmpresa');
+            const empresaSelecionada = selectEmpresa.value;
+
+            const empresas = new Set();
+            listaTecnicosGlobal.forEach(t => {
+                if (t.Empresa) empresas.add(t.Empresa);
+            });
+
+            selectEmpresa.innerHTML = '<option value="Todos">Todas as Empresas</option>';
+            Array.from(empresas).sort().forEach(e => {
+                selectEmpresa.innerHTML += `<option value="${e}">${e}</option>`;
+            });
+
+            selectEmpresa.value = empresas.has(empresaSelecionada) ? empresaSelecionada : "Todos";
+        }
+
+        function aplicarFiltrosLocal() {
+            renderizarGridFrequencia();
+            calcularMetricasDia();
+        }
+
+        // --- CÁLCULO DE MÉTRICAS DO DIA RESPONSIVO AOS FILTROS ---
+        function calcularMetricasDia() {
+            const emp = document.getElementById('filtroEmpresa').value;
+
+            // Filtra técnicos ativos segundo as regras do painel e do multi-select de ddds
+            const tecnicosAtivosFiltrados = listaTecnicosGlobal.filter(t => {
+                if (t.Status !== "Ativo") return false;
+                if (emp !== "Todos" && t.Empresa !== emp) return false;
+                if (!selectedDddsSet.has(t.DDD)) return false;
+                return true;
+            });
+
+            const loginsAtivosSet = new Set(tecnicosAtivosFiltrados.map(t => t.RowKey));
+
+            const hoje = new Date();
+            const hojeStr = hoje.toISOString().split('T')[0];
+            const hojeDate = parseDateMidnight(hojeStr);
+
+            let totalAfastadosHoje = 0;
+            let totalFaltasMes = 0;
+            const loginsAfastadosHoje = new Set();
+
+            const resumoEmpresas = {};
+            tecnicosAtivosFiltrados.forEach(t => {
+                if (!resumoEmpresas[t.Empresa]) {
+                    resumoEmpresas[t.Empresa] = { trabalhando: 0, faltas: 0, ferias: 0, atestado: 0 };
+                }
+            });
+
+            listaOcorrenciasGlobal.forEach(oc => {
+                if (!loginsAtivosSet.has(oc.Login)) return;
+
+                const dIni = parseDateMidnight(oc.DataInicio);
+                const dFim = parseDateMidnight(oc.DataFim);
+
+                const ativoHoje = (hojeDate >= dIni && hojeDate <= dFim);
+
+                if (ativoHoje) {
+                    if (oc.Ocorrencia === "Férias" || oc.Ocorrencia === "Atestado" || oc.Ocorrencia === "Falta") {
+                        loginsAfastadosHoje.add(oc.Login);
+                        totalAfastadosHoje++;
+                    }
+                }
+
+                if (oc.Ocorrencia === "Falta") {
+                    totalFaltasMes++;
+                }
+            });
+
+            tecnicosAtivosFiltrados.forEach(t => {
+                const login = t.RowKey;
+                const empNome = t.Empresa;
+
+                const ocHoje = listaOcorrenciasGlobal.find(oc => {
+                    if (oc.Login !== login) return false;
+                    const dIni = parseDateMidnight(oc.DataInicio);
+                    const dFim = parseDateMidnight(oc.DataFim);
+                    return (hojeDate >= dIni && hojeDate <= dFim);
+                });
+
+                if (ocHoje) {
+                    if (ocHoje.Ocorrencia === "Falta") resumoEmpresas[empNome].faltas++;
+                    else if (ocHoje.Ocorrencia === "Atestado") resumoEmpresas[empNome].atestado++;
+                    else if (ocHoje.Ocorrencia === "Férias") resumoEmpresas[empNome].ferias++;
+                    else if (ocHoje.Ocorrencia === "Presente") resumoEmpresas[empNome].trabalhando++;
+                } else {
+                    resumoEmpresas[empNome].trabalhando++; 
+                }
+            });
+
+            const painelEmpresas = document.getElementById('painelResumoEmpresas');
+            painelEmpresas.innerHTML = '';
+
+            Object.entries(resumoEmpresas).sort((a,b) => a[0].localeCompare(b[0])).forEach(([nomeEmp, stats]) => {
+                painelEmpresas.innerHTML += `
+                    <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-xl shadow-md space-y-2">
+                        <h4 class="font-black text-white text-xs uppercase border-b border-slate-700/50 pb-1.5">${nomeEmp}</h4>
+                        <div class="grid grid-cols-2 gap-2 text-[10px] uppercase font-bold">
+                            <div class="text-blue-400">🟢 Trab: <span class="text-white font-black">${stats.trabalhando}</span></div>
+                            <div class="text-red-400">🔴 Faltas: <span class="text-white font-black">${stats.faltas}</span></div>
+                            <div class="text-slate-400">⚪ Férias: <span class="text-white font-black">${stats.ferias}</span></div>
+                            <div class="text-amber-400 font-bold">🟡 Atest: <span class="text-white font-black">${stats.atestado}</span></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            const totalAtivosTrabalhando = tecnicosAtivosFiltrados.length - loginsAfastadosHoje.size;
+
+            document.getElementById('indicadorAtivos').innerText = totalAtivosTrabalhando >= 0 ? totalAtivosTrabalhando : 0;
+            document.getElementById('subIndicadorAtivos').innerText = `De ${tecnicosAtivosFiltrados.length} ativos filtrados`;
+            document.getElementById('indicadorFaltasMes').innerText = totalFaltasMes;
+            document.getElementById('indicadorAfastados').innerText = totalAfastadosHoje;
+        }
+
+        // --- RENDERIZAÇÃO DO QUADRO DE FREQUÊNCIA ---
+        function renderizarGridFrequencia() {
+            const header = document.getElementById('headerGridFrequencia');
+            const corpo = document.getElementById('corpoGridFrequencia');
+            const configData = obterDataFiltro();
+
+            const totalDiasNoMes = new Date(configData.ano, configData.mes, 0).getDate();
+
+            const hoje = new Date();
+            const isMesAtual = (configData.ano === hoje.getFullYear() && configData.mes === (hoje.getMonth() + 1));
+            
+            let totalDiasExibir = totalDiasNoMes;
+            if (isMesAtual && !exibirMesCompleto) {
+                totalDiasExibir = hoje.getDate(); 
+            }
+
+            let headerHTML = `
+                <tr>
+                    <th class="p-3 bg-slate-900 border-r border-slate-700 text-left sticky-col sticky top-0 z-30" style="min-width: 250px;">Técnico / Empresa / DDD</th>
+            `;
+
+            for (let dia = 1; dia <= totalDiasExibir; dia++) {
+                const diaDate = new Date(configData.ano, configData.mes - 1, dia);
+                const diaSemana = diaDate.getDay();
+                const isDomingo = diaSemana === 0;
+                const labelDia = String(dia).padStart(2, '0');
+                const weekLabel = ["D", "S", "T", "Q", "Q", "S", "S"][diaSemana];
+
+                headerHTML += `
+                    <th class="p-2 text-center border-r border-slate-800 text-[10px] min-w-[34px] ${isDomingo ? 'text-red-400 font-bold bg-slate-900' : ''}">
+                        ${labelDia}<br><span class="opacity-50 text-[8px]">${weekLabel}</span>
+                    </th>
+                `;
+            }
+            headerHTML += `</tr>`;
+            header.innerHTML = headerHTML;
+
+            const emp = document.getElementById('filtroEmpresa').value;
+
+            const tecnicosFiltrados = listaTecnicosGlobal.filter(t => {
+                if (emp !== "Todos" && t.Empresa !== emp) return false;
+                if (!selectedDddsSet.has(t.DDD)) return false;
+                return true;
+            });
+
+            if (tecnicosFiltrados.length === 0) {
+                corpo.innerHTML = `<tr><td colspan="${totalDiasExibir + 1}" class="p-4 text-center text-slate-500">Nenhum técnico atende aos filtros definidos.</td></tr>`;
+                return;
+            }
+
+            let corpoHTML = "";
+
+            tecnicosFiltrados.sort((a,b) => a.Nome.localeCompare(b.Nome)).forEach(t => {
+                const isExpanded = expandedTechLogins.has(t.RowKey);
+                
+                corpoHTML += `
+                    <tr class="hover:bg-slate-800/20 transition-all border-b border-slate-800">
+                        <td class="p-2 border-r border-slate-800 sticky-col cursor-pointer" onclick="toggleDetalhesTecnico('${t.RowKey}')">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="text-[10px] opacity-40 mr-1">${isExpanded ? '▼' : '▶'}</span>
+                                    <strong class="text-white text-xs hover:underline uppercase">${t.Nome}</strong>
+                                    <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${t.Empresa} (DDD ${t.DDD})</div>
+                                </div>
+                            </div>
+                            ${isExpanded ? `
+                                <div class="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-300 space-y-2 animate-fade-in bg-slate-950/40 p-2 rounded-lg" onclick="event.stopPropagation()">
+                                    <div><strong>Login:</strong> ${t.RowKey}</div>
+                                    <div><strong>Cidade:</strong> ${t.Cidade}</div>
+                                    <div><strong>Celular:</strong> ${t.Telefone}</div>
+                                    <div class="flex gap-1 pt-1">
+                                        <button onclick="copiarDadosTecnico('${t.Nome}', '${t.RowKey}', '${t.Cidade}', '${t.DDD}', '${t.Telefone}', this)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">📋 Copiar</button>
+                                        <button onclick="preencherEdicao('${t.RowKey}')" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">✏️ Editar Perfil</button>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </td>
+                `;
+
+                for (let dia = 1; dia <= totalDiasExibir; dia++) {
+                    const diaFmt = `${configData.ano}-${String(configData.mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+                    const diaDate = new Date(configData.ano, configData.mes - 1, dia);
+                    const isDomingo = diaDate.getDay() === 0;
+
+                    let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
+                    let innerSymbol = "•"; 
+                    let occurrenceObject = null;
+
+                    if (isDomingo) {
+                        bgClasse = "domingo-cell cursor-not-allowed";
+                        innerSymbol = "D";
+                    } else {
+                        const matchingOc = listaOcorrenciasGlobal.find(oc => {
+                            if (oc.Login !== t.RowKey) return false;
+                            const dIni = parseDateMidnight(oc.DataInicio);
+                            const dFim = parseDateMidnight(oc.DataFim);
+                            return (diaDate >= dIni && diaDate <= dFim);
+                        });
+
+                        if (matchingOc) {
+                            occurrenceObject = matchingOc;
+                            if (matchingOc.Ocorrencia === "Presente") {
+                                bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
+                                innerSymbol = "P";
+                            } else if (matchingOc.Ocorrencia === "Falta") {
+                                bgClasse = "bg-red-600 text-white font-bold hover:opacity-90 cursor-pointer";
+                                innerSymbol = "F";
+                            } else if (matchingOc.Ocorrencia === "Atestado") {
+                                bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
+                                innerSymbol = "A";
+                            } else if (matchingOc.Ocorrencia === "Férias") {
+                                bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
+                                innerSymbol = "Ferias";
+                            }
+                        }
+                    }
+
+                    const clickAction = isDomingo ? 
+                        `alert('Domingo não trabalhamos!')` : 
+                        `abrirModalStatus('${t.RowKey}', '${t.Nome}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${occurrenceObject ? occurrenceObject.RowKey : ''}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}')`;
+
+                    corpoHTML += `
+                        <td class="p-2 border-r border-slate-800 text-center ${bgClasse} text-[10px]" onclick="${clickAction}">
+                            ${innerSymbol}
+                        </td>
+                    `;
+                }
+
+                corpoHTML += `</tr>`;
+            });
+
+            corpo.innerHTML = corpoHTML;
+        }
+
+        // --- SISTEMA DE MODAIS & POPUPS ---
+        function abrirModalCadastro() {
+            document.getElementById('tituloModalCadastro').innerText = "Registrar Novo Técnico";
+            document.getElementById('formTecnico').reset();
+            document.getElementById('tecLogin').disabled = false;
+            document.getElementById('modalCadastro').style.display = 'flex';
+        }
+
+        function fecharModalCadastro() {
+            document.getElementById('modalCadastro').style.display = 'none';
+        }
+
+        function abrirModalStatus(login, nome, dataStr, statusAtual, rowKey, dIni, dFim) {
+            document.getElementById('descModalStatus').innerHTML = `<strong>Técnico:</strong> ${nome}<br><strong>Data clicada:</strong> ${dataStr.split('-').reverse().join('/')}`;
+            document.getElementById('statusLogin').value = login;
+            document.getElementById('statusDataAlvo').value = dataStr;
+            document.getElementById('statusRowKeyExistente').value = rowKey;
+
+            const statusSelect = document.getElementById('statusSelect');
+            statusSelect.value = statusAtual;
+
+            const dIniInput = document.getElementById('statusDataInicio');
+            const dFimInput = document.getElementById('statusDataFim');
+
+            if (statusAtual === "Presente" || statusAtual === "Falta" || statusAtual === "Limpar") {
+                dIniInput.value = dataStr;
+                dFimInput.value = dataStr;
+            } else {
+                dIniInput.value = dIni || dataStr;
+                dFimInput.value = dFim || dataStr;
+            }
+
+            toggleStatusPeriodo();
+            document.getElementById('modalStatus').style.display = 'flex';
+        }
+
+        function fecharModalStatus() {
+            document.getElementById('modalStatus').style.display = 'none';
+        }
+
+        function toggleStatusPeriodo() {
+            const val = document.getElementById('statusSelect').value;
+            const singleContainer = document.getElementById('statusDataUnicaContainer');
+            const periodContainer = document.getElementById('statusPeriodoContainer');
+
+            const dIni = document.getElementById('statusDataInicio');
+            const dFim = document.getElementById('statusDataFim');
+
+            if (val === "Presente" || val === "Falta" || val === "Limpar") {
+                singleContainer.classList.remove('hidden');
+                periodContainer.classList.add('hidden');
+                dIni.required = false;
+                dFim.required = false;
+            } else {
+                singleContainer.classList.add('hidden');
+                periodContainer.classList.remove('hidden');
+                dIni.required = true;
+                dFim.required = true;
+            }
+        }
+
+        async function salvarAlteracaoFrequencia(e) {
+            e.preventDefault();
+
+            const login = document.getElementById('statusLogin').value;
+            const status = document.getElementById('statusSelect').value;
+            const dataAlvo = document.getElementById('statusDataAlvo').value;
+            const rowKeyExistente = document.getElementById('statusRowKeyExistente').value;
+
+            const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
+            if (!tec) return;
+
+            // Operações alteradas para gravar na nova tabela do Azure "EquipeSPI" [2]
+            if (status === "Limpar") {
+                if (rowKeyExistente) {
+                    const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
+                    await apagarRegistroAzure('EquipeSPI', partition, rowKeyExistente);
+                } else {
+                    alert("O dia selecionado já está sem registro.");
+                    fecharModalStatus();
+                    return;
+                }
+            } else {
+                let dInicio = dataAlvo;
+                let dFim = dataAlvo;
+
+                if (status === "Falta" || status === "Presente") {
+                    dInicio = dataAlvo;
+                    dFim = dataAlvo;
+                } else {
+                    dInicio = document.getElementById('statusDataInicio').value;
+                    dFim = document.getElementById('statusDataFim').value;
+                }
+
+                if (!dInicio || !dFim) {
+                    alert("Período incompleto.");
+                    return;
+                }
+
+                const partitionNew = dInicio.replace(/-/g, '').substring(0, 6);
+                const rKeyNew = `${login}_${status}_${dInicio.replace(/-/g, '')}`;
+
+                if (rowKeyExistente && rowKeyExistente !== rKeyNew) {
+                    const partitionOld = rowKeyExistente.split('_').pop().substring(0, 6);
+                    await apagarRegistroAzure('EquipeSPI', partitionOld, rowKeyExistente);
+                }
+
+                const corpo = {
+                    Login: login,
+                    Nome: tec.Nome,
+                    Empresa: tec.Empresa,
+                    Ocorrencia: status,
+                    DataInicio: dInicio,
+                    DataFim: dFim
+                };
+
+                const url = `https://${storageAccount}.table.core.windows.net/EquipeSPI(PartitionKey='${partitionNew}',RowKey='${rKeyNew}')${MEU_TOKEN_FIXO}`;
+
+                try {
+                    const res = await fetch(url, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json;odata=nometadata',
+                            'x-ms-version': '2020-04-08',
+                            'DataServiceVersion': '3.0',
+                            'MaxDataServiceVersion': '3.0'
+                        },
+                        body: JSON.stringify(corpo)
+                    });
+
+                    if (!res.ok) {
+                        const errorTxt = await res.text();
+                        throw new Error(errorTxt);
+                    }
+                } catch (err) {
+                    alert("Erro ao gravar frequência: " + err.message);
+                    return;
+                }
+            }
+
+            alert("Frequência atualizada com sucesso!");
+            fecharModalStatus();
+            carregarPainelSincronizado();
+        }
+
+        async function apagarRegistroAzure(tabela, partition, rowKey) {
+            const url = `https://${storageAccount}.table.core.windows.net/${tabela}(PartitionKey='${partition}',RowKey='${rowKey}')${MEU_TOKEN_FIXO}`;
+            try {
+                await fetch(url, {
+                    method: 'DELETE',
+                    headers: { 'If-Match': '*', 'x-ms-version': '2020-04-08' }
+                });
+            } catch (err) {
+                console.error("Erro ao deletar:", err);
+            }
+        }
+
+        // --- EDICAO E CADASTRO DE PERFIL (EquipeSPI) ---
+        function preencherEdicao(login) {
+            const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
+            if (!tec) return;
+
+            document.getElementById('tituloModalCadastro').innerText = "Editar Técnico";
+            document.getElementById('tecNome').value = tec.Nome;
+            document.getElementById('tecLogin').value = tec.RowKey;
+            document.getElementById('tecLogin').disabled = true; // Login (RowKey) não muda na edição
+            document.getElementById('tecEmpresa').value = tec.Empresa;
+            document.getElementById('tecCidade').value = tec.Cidade;
+            document.getElementById('tecDdd').value = tec.DDD;
+            document.getElementById('tecTelefone').value = tec.Telefone;
+            document.getElementById('tecStatus').value = tec.Status;
+            
+            document.getElementById('modalCadastro').style.display = 'flex';
+        }
+
+        async function salvarTecnico(e) {
+            e.preventDefault();
+            const login = document.getElementById('tecLogin').value.trim().toUpperCase().replace(/[^a-zA-Z0-9]/g, '');
+            
+            const corpo = {
+                Nome: document.getElementById('tecNome').value.trim(),
+                Empresa: document.getElementById('tecEmpresa').value.trim(),
+                Cidade: document.getElementById('tecCidade').value.trim().toUpperCase(),
+                DDD: document.getElementById('tecDdd').value.trim(),
+                Telefone: document.getElementById('tecTelefone').value.trim(),
+                Status: document.getElementById('tecStatus').value
+            };
+
+            const url = `https://${storageAccount}.table.core.windows.net/EquipeSPI(PartitionKey='PERFIL',RowKey='${login}')${MEU_TOKEN_FIXO}`;
+
+            try {
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json;odata=nometadata',
+                        'x-ms-version': '2020-04-08',
+                        'DataServiceVersion': '3.0',
+                        'MaxDataServiceVersion': '3.0'
+                    },
+                    body: JSON.stringify(corpo)
+                });
+
+                if (res.ok) {
+                    alert("Técnico salvo com sucesso!");
+                    fecharModalCadastro();
+                    carregarPainelSincronizado();
+                } else {
+                    const txt = await res.text();
+                    throw new Error(txt);
+                }
+            } catch (err) {
+                alert("Erro ao gravar técnico: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
