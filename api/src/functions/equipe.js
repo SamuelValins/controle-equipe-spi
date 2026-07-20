@@ -1,7 +1,7 @@
 const { app } = require('@azure/functions');
 const https = require('https');
 
-// Função auxiliar para realizar requisições HTTPS nativas (evita quebras devido à ausência do global fetch em ambientes legados)
+// Função auxiliar para realizar requisições HTTPS nativas
 function makeRequest(targetUrl, method, headers, body) {
     return new Promise((resolve, reject) => {
         const req = https.request(targetUrl, { method, headers }, (res) => {
@@ -106,6 +106,12 @@ app.http('equipe', {
                         body = rawBody; // Fallback caso não seja JSON válido
                     }
                 }
+            }
+
+            // --- CORREÇÃO: CÁLCULO E INCLUSÃO DO HEADER 'Content-Length' ---
+            // Azure Table Storage exige Content-Length explícito para requisições de escrita.
+            if (body !== undefined) {
+                headers['Content-Length'] = Buffer.byteLength(body, 'utf8');
             }
 
             const response = await makeRequest(targetUrl, method, headers, body);
