@@ -108,18 +108,28 @@ app.http('equipe', {
                 }
             }
 
-            // --- CORREÇÃO: CÁLCULO E INCLUSÃO DO HEADER 'Content-Length' ---
-            // Azure Table Storage exige Content-Length explícito para requisições de escrita.
+            // Cálculo e inclusão do header 'Content-Length' (Exigido pelo Azure)
             if (body !== undefined) {
                 headers['Content-Length'] = Buffer.byteLength(body, 'utf8');
             }
 
             const response = await makeRequest(targetUrl, method, headers, body);
 
+            let resStatus = response.status;
+            let resBody = response.body;
+
+            // --- NORMALIZAÇÃO DO STATUS 204 NO CONTENT ---
+            // Se o Azure retornar sucesso sem conteúdo (204), transformamos em 200 com JSON válido.
+            // Isso evita que o proxy da Azure Static Web Apps falhe com erro 500 no navegador.
+            if (resStatus === 204) {
+                resStatus = 200;
+                resBody = JSON.stringify({ success: true });
+            }
+
             return {
-                status: response.status,
+                status: resStatus,
                 headers: { 'Content-Type': 'application/json' },
-                body: response.body
+                body: resBody
             };
 
         } catch (err) {
