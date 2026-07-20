@@ -300,6 +300,38 @@
         let exibirMesCompleto = false; 
         let painelEmpresasExpandido = false; 
 
+        // --- SISTEMA DE RESOLUÇÃO DE DATA E VISUALIZAÇÃO DE DETALHES ---
+        function obterDataFiltro() {
+            const filtro = document.getElementById('filtroMesAno').value; // Formato "YYYY-MM"
+            if (!filtro) {
+                const hoje = new Date();
+                const ano = hoje.getFullYear();
+                const mes = hoje.getMonth() + 1;
+                return {
+                    ano,
+                    mes,
+                    partitionKey: `${ano}${String(mes).padStart(2, '0')}`
+                };
+            }
+            const [anoStr, mesStr] = filtro.split('-');
+            const ano = parseInt(anoStr, 10);
+            const mes = parseInt(mesStr, 10);
+            return {
+                ano,
+                mes,
+                partitionKey: `${anoStr}${mesStr}`
+            };
+        }
+
+        function toggleDetalhesTecnico(login) {
+            if (expandedTechLogins.has(login)) {
+                expandedTechLogins.delete(login);
+            } else {
+                expandedTechLogins.add(login);
+            }
+            renderizarGridFrequencia();
+        }
+
         function parseDateMidnight(dateStr) {
             if (!dateStr) return null;
             const [year, month, day] = dateStr.split('-').map(Number);
@@ -421,7 +453,8 @@
             document.getElementById('loadingSpinner').classList.remove('hidden');
             const configData = obterDataFiltro();
 
-            const urlTecnicos = `/api/equipe`;
+            // Otimizado para buscar apenas os perfis cadastrados no Azure Table
+            const urlTecnicos = `/api/equipe?$filter=PartitionKey eq 'PERFIL'`;
             const urlOcorrencias = `/api/equipe?$filter=PartitionKey eq '${configData.partitionKey}'`;
 
             try {
