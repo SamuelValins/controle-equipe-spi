@@ -186,7 +186,6 @@
                 <h3 class="text-white font-black uppercase text-xs" id="tituloModalCadastro">Registrar Técnico</h3>
                 <button onclick="fecharModalCadastro()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
             </div>
-            <!-- Bug de ID do formulário resolvido -->
             <form id="formTecnico" onsubmit="salvarTecnico(event)" class="p-6 space-y-4 text-xs">
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome Completo</label>
@@ -285,7 +284,6 @@
 
     <!-- Script de Integração do Azure Storage & Frequência -->
     <script>
-        // Não existem mais placeholders no frontend! As rotas apontam para /api/equipe
         const dddMapping = {
             'Jorge': ['12', '13'],
             'Samuel': ['14', '18'],
@@ -508,7 +506,7 @@
                 const dIni = parseDateMidnight(oc.DataInicio);
                 const dFim = parseDateMidnight(oc.DataFim);
 
-                const ativoHoje = (hojeDate >= dIni && hojeDate <= dFim);
+                const ativoHoje = (hojeDate >= dIni && dFim >= hojeDate);
 
                 if (ativoHoje) {
                     if (oc.Ocorrencia === "Férias" || oc.Ocorrencia === "Atestado" || oc.Ocorrencia === "Falta") {
@@ -530,7 +528,7 @@
                     if (oc.Login !== login) return false;
                     const dIni = parseDateMidnight(oc.DataInicio);
                     const dFim = parseDateMidnight(oc.DataFim);
-                    return (hojeDate >= dIni && dFim >= diaDate);
+                    return (hojeDate >= dIni && dFim >= hojeDate);
                 });
 
                 if (ocHoje) {
@@ -584,7 +582,6 @@
                 totalDiasExibir = hoje.getDate(); 
             }
 
-            // 1. GERA CABEÇALHO DO GRID COM FIXAÇÃO DUPLA ( sticky top-0 e left-0 ) [1]
             let headerHTML = `
                 <tr>
                     <th class="p-3 bg-slate-900 border-r border-slate-700 text-left sticky-col sticky top-0 z-30" style="min-width: 250px;">Técnico / Empresa / DDD</th>
@@ -653,6 +650,7 @@
                     const diaDate = new Date(configData.ano, configData.mes - 1, dia);
                     const isDomingo = diaDate.getDay() === 0;
 
+                    // Ajustado para TRANSPARENTE/AZUL BEM CLARO por padrão
                     let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
                     let innerSymbol = "•"; 
                     let occurrenceObject = null;
@@ -671,6 +669,7 @@
                         if (matchingOc) {
                             occurrenceObject = matchingOc;
                             if (matchingOc.Ocorrencia === "Presente") {
+                                // PINTA DE AZUL MAIS FORTE quando preenchido explicitamente como presente
                                 bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
                                 innerSymbol = "P";
                             } else if (matchingOc.Ocorrencia === "Falta") {
@@ -680,6 +679,7 @@
                                 bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
                                 innerSymbol = "A";
                             } else if (matchingOc.Ocorrencia === "Férias") {
+                                // Exibe a palavra "Ferias" completa com fonte reduzida para caber no quadradinho
                                 bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
                                 innerSymbol = "Ferias";
                             }
@@ -775,7 +775,7 @@
             const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
             if (!tec) return;
 
-            // URLs de chamada ajustadas para conter ambos os parâmetros (PartitionKey e RowKey) na URL [2]
+            // O novo formato de URL baseado em Query Params [2]
             if (status === "Limpar") {
                 if (rowKeyExistente) {
                     const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
@@ -819,8 +819,8 @@
                     DataFim: dFim
                 };
 
-                // Corrigida a estrutura de URL com o formato (PartitionKey, RowKey) exigido pelo Azure [2]
-                const url = `/api/equipe/(PartitionKey='${partitionNew}',RowKey='${rKeyNew}')`;
+                // Enviamos no padrão de Query Parameters, eliminando caminhos na URL [2]
+                const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
 
                 try {
                     const res = await fetch(url, {
@@ -848,8 +848,8 @@
         }
 
         async function apagarRegistroAzure(tabela, partition, rowKey) {
-            // Corrigida a estrutura de deleção do Proxy com ambas as chaves [2]
-            const url = `/api/equipe/(PartitionKey='${partition}',RowKey='${rowKey}')`;
+            // Enviamos no padrão de Query Parameters, eliminando caminhos na URL [2]
+            const url = `/api/equipe?PartitionKey=${partition}&RowKey=${rowKey}`;
             try {
                 await fetch(url, {
                     method: 'DELETE',
@@ -891,8 +891,8 @@
                 Status: document.getElementById('tecStatus').value
             };
 
-            // Corrigida a estrutura de URL com o formato (PartitionKey, RowKey) exigido pelo Azure [2]
-            const url = `/api/equipe/(PartitionKey='PERFIL',RowKey='${login}')`;
+            // Enviamos no padrão de Query Parameters, eliminando caminhos na URL [2]
+            const url = `/api/equipe?PartitionKey=PERFIL&RowKey=${login}`;
 
             try {
                 const res = await fetch(url, {
