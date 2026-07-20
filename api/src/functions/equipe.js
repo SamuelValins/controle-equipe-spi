@@ -1,7 +1,6 @@
 const { app } = require('@azure/functions');
 
 app.http('equipe', {
-    route: 'equipe/{*rest}', // Captura caminhos dinâmicos com parênteses do Azure [2]
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     authLevel: 'anonymous',
     handler: async (request, context) => {
@@ -23,21 +22,22 @@ app.http('equipe', {
         }
 
         const urlObj = new URL(request.url);
-        const query = urlObj.search;
-        const rest = request.params.rest || '';
-
-        // Monta o endpoint do Azure Table de forma limpa e decodificada [2]
-        let targetUrl = `https://${storageAccount}.table.core.windows.net/EquipeSPI`;
-        if (rest) {
-            const decodedRest = decodeURIComponent(rest);
-            if (decodedRest.startsWith('(')) {
-                targetUrl += decodedRest; // Evita barras extras antes do parênteses
-            } else {
-                targetUrl += '/' + decodedRest;
-            }
-        }
         
-        // Garante a junção limpa da Query e do Token SAS de forma estruturada
+        // Lê de forma limpa os parâmetros de consulta enviados pelo navegador
+        const pk = urlObj.searchParams.get('PartitionKey');
+        const rk = urlObj.searchParams.get('RowKey');
+
+        // Reconstrói a URL de forma precisa para a tabela "EquipeSPI" no Azure [2]
+        let targetUrl = `https://${storageAccount}.table.core.windows.net/EquipeSPI`;
+        if (pk && rk) {
+            targetUrl += `(PartitionKey='${pk}',RowKey='${rk}')`;
+            
+            // Remove do Query String para não enviar duplicado para o Azure
+            urlObj.searchParams.delete('PartitionKey');
+            urlObj.searchParams.delete('RowKey');
+        }
+
+        const query = urlObj.search;
         const cleanSas = sasToken.startsWith('?') ? sasToken : '?' + sasToken;
         if (query) {
             targetUrl += query + '&' + cleanSas.substring(1);
@@ -70,7 +70,6 @@ app.http('equipe', {
                 body: resText
             };
         } catch (err) {
-            // Retorna detalhes ricos do ambiente para localizarmos o erro de rede
             return {
                 status: 500,
                 headers: { 'Content-Type': 'application/json' },
