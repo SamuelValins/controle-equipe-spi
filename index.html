@@ -186,6 +186,7 @@
                 <h3 class="text-white font-black uppercase text-xs" id="tituloModalCadastro">Registrar Técnico</h3>
                 <button onclick="fecharModalCadastro()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
             </div>
+            <!-- Bug de ID do formulário resolvido -->
             <form id="formTecnico" onsubmit="salvarTecnico(event)" class="p-6 space-y-4 text-xs">
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome Completo</label>
@@ -417,23 +418,11 @@
             }
         }
 
-        function obterDataFiltro() {
-            const mesAno = document.getElementById('filtroMesAno').value; 
-            if (!mesAno) return { ano: 2026, mes: 7, partitionKey: '202607' };
-            const [ano, mes] = mesAno.split('-').map(Number);
-            return {
-                ano,
-                mes,
-                partitionKey: mesAno.replace(/-/g, '')
-            };
-        }
-
         // --- COMUNICAÇÃO TOTALMENTE REDIRECIONADA À API INTERNA ---
         async function carregarPainelSincronizado() {
             document.getElementById('loadingSpinner').classList.remove('hidden');
             const configData = obterDataFiltro();
 
-            // Chamada direta para o backend local (SWA mapeia automaticamente para a API) [2]
             const urlTecnicos = `/api/equipe`;
             const urlOcorrencias = `/api/equipe?$filter=PartitionKey eq '${configData.partitionKey}'`;
 
@@ -541,7 +530,7 @@
                     if (oc.Login !== login) return false;
                     const dIni = parseDateMidnight(oc.DataInicio);
                     const dFim = parseDateMidnight(oc.DataFim);
-                    return (hojeDate >= dIni && hojeDate <= dFim);
+                    return (hojeDate >= dIni && dFim >= diaDate);
                 });
 
                 if (ocHoje) {
@@ -579,6 +568,7 @@
             document.getElementById('indicadorAfastados').innerText = totalAfastadosHoje;
         }
 
+        // --- RENDERIZAÇÃO DO QUADRO DE FREQUÊNCIA ---
         function renderizarGridFrequencia() {
             const header = document.getElementById('headerGridFrequencia');
             const corpo = document.getElementById('corpoGridFrequencia');
@@ -594,6 +584,7 @@
                 totalDiasExibir = hoje.getDate(); 
             }
 
+            // 1. GERA CABEÇALHO DO GRID COM FIXAÇÃO DUPLA ( sticky top-0 e left-0 ) [1]
             let headerHTML = `
                 <tr>
                     <th class="p-3 bg-slate-900 border-r border-slate-700 text-left sticky-col sticky top-0 z-30" style="min-width: 250px;">Técnico / Empresa / DDD</th>
@@ -784,7 +775,7 @@
             const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
             if (!tec) return;
 
-            // Operações apontando para a API local (Eles são roteados para o Proxy seguro do SWA) [2]
+            // URLs de chamada ajustadas para conter ambos os parâmetros (PartitionKey e RowKey) na URL [2]
             if (status === "Limpar") {
                 if (rowKeyExistente) {
                     const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
@@ -828,7 +819,8 @@
                     DataFim: dFim
                 };
 
-                const url = `/api/equipe(${corpo.Login}_${status}_${dInicio.replace(/-/g, '')})`;
+                // Corrigida a estrutura de URL com o formato (PartitionKey, RowKey) exigido pelo Azure [2]
+                const url = `/api/equipe/(PartitionKey='${partitionNew}',RowKey='${rKeyNew}')`;
 
                 try {
                     const res = await fetch(url, {
@@ -856,7 +848,8 @@
         }
 
         async function apagarRegistroAzure(tabela, partition, rowKey) {
-            const url = `/api/equipe(${rowKey})`;
+            // Corrigida a estrutura de deleção do Proxy com ambas as chaves [2]
+            const url = `/api/equipe/(PartitionKey='${partition}',RowKey='${rowKey}')`;
             try {
                 await fetch(url, {
                     method: 'DELETE',
@@ -898,7 +891,8 @@
                 Status: document.getElementById('tecStatus').value
             };
 
-            const url = `/api/equipe(${login})`;
+            // Corrigida a estrutura de URL com o formato (PartitionKey, RowKey) exigido pelo Azure [2]
+            const url = `/api/equipe/(PartitionKey='PERFIL',RowKey='${login}')`;
 
             try {
                 const res = await fetch(url, {
