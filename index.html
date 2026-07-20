@@ -77,7 +77,7 @@
         <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center p-5 bg-slate-800/80 backdrop-blur border border-slate-700/50 rounded-2xl gap-4">
             <div>
                 <h1 class="text-xl font-black text-white uppercase tracking-tight">Escala de Frequência Mensal - SPI</h1>
-                <p class="text-xs text-slate-400 font-bold uppercase mt-0.5">Controle integrado na tabela EquipeSPI do Azure</p>
+                <p class="text-xs text-slate-400 font-bold uppercase mt-0.5">Controle integrado com segurança máxima via API</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
                 <div class="flex flex-col">
@@ -186,7 +186,6 @@
                 <h3 class="text-white font-black uppercase text-xs" id="tituloModalCadastro">Registrar Técnico</h3>
                 <button onclick="fecharModalCadastro()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
             </div>
-            <!-- Bug de ID do formulário resolvido -->
             <form id="formTecnico" onsubmit="salvarTecnico(event)" class="p-6 space-y-4 text-xs">
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome Completo</label>
@@ -285,10 +284,7 @@
 
     <!-- Script de Integração do Azure Storage & Frequência -->
     <script>
-        // Marcadores que serão substituídos pelo GitHub Actions no Deploy
-        const storageAccount = "ACCOUNT_PLACEHOLDER";
-        const MEU_TOKEN_FIXO = "SAS_TOKEN_PLACEHOLDER";
-
+        // Não existem mais placeholders no frontend! As rotas apontam para /api/equipe
         const dddMapping = {
             'Jorge': ['12', '13'],
             'Samuel': ['14', '18'],
@@ -305,7 +301,6 @@
         let exibirMesCompleto = false; 
         let painelEmpresasExpandido = false; 
 
-        // Normalização de data para meia-noite local
         function parseDateMidnight(dateStr) {
             if (!dateStr) return null;
             const [year, month, day] = dateStr.split('-').map(Number);
@@ -341,9 +336,7 @@
             } else {
                 selectedDddsSet.add(ddd);
             }
-            // Sincroniza o select de responsável de volta para "Todos" caso quebre a correspondência direta
             document.getElementById('filtroResponsavel').value = "Todos";
-            
             renderizarFiltrosDdd();
             aplicarFiltrosLocal();
         }
@@ -387,7 +380,7 @@
             });
         }
 
-        // --- MUDANÇA DE DATA & CONEXÃO AZURE ---
+        // --- INTERATIVIDADE ---
         function toggleLimiteMes() {
             exibirMesCompleto = !exibirMesCompleto;
             const btn = document.getElementById('btnToggleEscala');
@@ -424,18 +417,30 @@
             }
         }
 
+        function obterDataFiltro() {
+            const mesAno = document.getElementById('filtroMesAno').value; 
+            if (!mesAno) return { ano: 2026, mes: 7, partitionKey: '202607' };
+            const [ano, mes] = mesAno.split('-').map(Number);
+            return {
+                ano,
+                mes,
+                partitionKey: mesAno.replace(/-/g, '')
+            };
+        }
+
+        // --- COMUNICAÇÃO TOTALMENTE REDIRECIONADA À API INTERNA ---
         async function carregarPainelSincronizado() {
             document.getElementById('loadingSpinner').classList.remove('hidden');
             const configData = obterDataFiltro();
 
-            // Mapeamento alterado para ler os dados da nova tabela unificada "EquipeSPI" [2]
-            const urlTecnicos = `https://${storageAccount}.table.core.windows.net/EquipeSPI()?$filter=PartitionKey eq 'PERFIL'${MEU_TOKEN_FIXO.replace('?', '&')}`;
-            const urlOcorrencias = `https://${storageAccount}.table.core.windows.net/EquipeSPI()?$filter=PartitionKey eq '${configData.partitionKey}'${MEU_TOKEN_FIXO.replace('?', '&')}`;
+            // Chamada direta para o backend local (SWA mapeia automaticamente para a API) [2]
+            const urlTecnicos = `/api/equipe`;
+            const urlOcorrencias = `/api/equipe?$filter=PartitionKey eq '${configData.partitionKey}'`;
 
             try {
                 const [resTecs, resOcor] = await Promise.all([
-                    fetch(urlTecnicos, { headers: { 'Accept': 'application/json;odata=nometadata', 'x-ms-version': '2020-04-08' } }),
-                    fetch(urlOcorrencias, { headers: { 'Accept': 'application/json;odata=nometadata', 'x-ms-version': '2020-04-08' } })
+                    fetch(urlTecnicos, { headers: { 'Accept': 'application/json' } }),
+                    fetch(urlOcorrencias, { headers: { 'Accept': 'application/json' } })
                 ]);
 
                 if (resTecs.ok) {
@@ -481,11 +486,9 @@
             calcularMetricasDia();
         }
 
-        // --- CÁLCULO DE MÉTRICAS DO DIA RESPONSIVO AOS FILTROS ---
         function calcularMetricasDia() {
             const emp = document.getElementById('filtroEmpresa').value;
 
-            // Filtra técnicos ativos segundo as regras do painel e do multi-select de ddds
             const tecnicosAtivosFiltrados = listaTecnicosGlobal.filter(t => {
                 if (t.Status !== "Ativo") return false;
                 if (emp !== "Todos" && t.Empresa !== emp) return false;
@@ -576,7 +579,6 @@
             document.getElementById('indicadorAfastados').innerText = totalAfastadosHoje;
         }
 
-        // --- RENDERIZAÇÃO DO QUADRO DE FREQUÊNCIA ---
         function renderizarGridFrequencia() {
             const header = document.getElementById('headerGridFrequencia');
             const corpo = document.getElementById('corpoGridFrequencia');
@@ -660,7 +662,6 @@
                     const diaDate = new Date(configData.ano, configData.mes - 1, dia);
                     const isDomingo = diaDate.getDay() === 0;
 
-                    // Ajustado para TRANSPARENTE/AZUL BEM CLARO por padrão
                     let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
                     let innerSymbol = "•"; 
                     let occurrenceObject = null;
@@ -679,7 +680,6 @@
                         if (matchingOc) {
                             occurrenceObject = matchingOc;
                             if (matchingOc.Ocorrencia === "Presente") {
-                                // PINTA DE AZUL MAIS FORTE quando preenchido explicitamente como presente
                                 bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
                                 innerSymbol = "P";
                             } else if (matchingOc.Ocorrencia === "Falta") {
@@ -689,7 +689,6 @@
                                 bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
                                 innerSymbol = "A";
                             } else if (matchingOc.Ocorrencia === "Férias") {
-                                // Exibe a palavra "Ferias" completa com fonte reduzida para caber no quadradinho
                                 bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
                                 innerSymbol = "Ferias";
                             }
@@ -718,7 +717,6 @@
             document.getElementById('tituloModalCadastro').innerText = "Registrar Novo Técnico";
             document.getElementById('formTecnico').reset();
             document.getElementById('tecLogin').disabled = false;
-            // Correção da abertura do modal no Tailwind
             document.getElementById('modalCadastro').classList.remove('hidden');
         }
 
@@ -786,7 +784,7 @@
             const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
             if (!tec) return;
 
-            // Operações de frequência vinculadas diretamente à tabela unificada "EquipeSPI" [2]
+            // Operações apontando para a API local (Eles são roteados para o Proxy seguro do SWA) [2]
             if (status === "Limpar") {
                 if (rowKeyExistente) {
                     const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
@@ -830,17 +828,14 @@
                     DataFim: dFim
                 };
 
-                const url = `https://${storageAccount}.table.core.windows.net/EquipeSPI(PartitionKey='${partitionNew}',RowKey='${rKeyNew}')${MEU_TOKEN_FIXO}`;
+                const url = `/api/equipe(${corpo.Login}_${status}_${dInicio.replace(/-/g, '')})`;
 
                 try {
                     const res = await fetch(url, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Accept': 'application/json;odata=nometadata',
-                            'x-ms-version': '2020-04-08',
-                            'DataServiceVersion': '3.0',
-                            'MaxDataServiceVersion': '3.0'
+                            'Accept': 'application/json'
                         },
                         body: JSON.stringify(corpo)
                     });
@@ -861,11 +856,11 @@
         }
 
         async function apagarRegistroAzure(tabela, partition, rowKey) {
-            const url = `https://${storageAccount}.table.core.windows.net/${tabela}(PartitionKey='${partition}',RowKey='${rowKey}')${MEU_TOKEN_FIXO}`;
+            const url = `/api/equipe(${rowKey})`;
             try {
                 await fetch(url, {
                     method: 'DELETE',
-                    headers: { 'If-Match': '*', 'x-ms-version': '2020-04-08' }
+                    headers: { 'If-Match': '*' }
                 });
             } catch (err) {
                 console.error("Erro ao deletar:", err);
@@ -880,7 +875,7 @@
             document.getElementById('tituloModalCadastro').innerText = "Editar Técnico";
             document.getElementById('tecNome').value = tec.Nome;
             document.getElementById('tecLogin').value = tec.RowKey;
-            document.getElementById('tecLogin').disabled = true; // Login (RowKey) não muda na edição
+            document.getElementById('tecLogin').disabled = true; 
             document.getElementById('tecEmpresa').value = tec.Empresa;
             document.getElementById('tecCidade').value = tec.Cidade;
             document.getElementById('tecDdd').value = tec.DDD;
@@ -903,17 +898,14 @@
                 Status: document.getElementById('tecStatus').value
             };
 
-            const url = `https://${storageAccount}.table.core.windows.net/EquipeSPI(PartitionKey='PERFIL',RowKey='${login}')${MEU_TOKEN_FIXO}`;
+            const url = `/api/equipe(${login})`;
 
             try {
                 const res = await fetch(url, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json;odata=nometadata',
-                        'x-ms-version': '2020-04-08',
-                        'DataServiceVersion': '3.0',
-                        'MaxDataServiceVersion': '3.0'
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify(corpo)
                 });
