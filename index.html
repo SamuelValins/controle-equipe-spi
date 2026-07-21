@@ -759,6 +759,96 @@
             carregarPainelSincronizado();
         }
 
+        // --- FUNÇÃO AUXILIAR: GERA LINHA DO TÉCNICO NO GRID ---
+        function gerarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje) {
+            const isExpanded = expandedTechLogins.has(t.RowKey);
+            const localInfo = t.Cidade ? `${t.Empresa} - ${t.Cidade}` : t.Empresa;
+            
+            let rowHTML = `
+                <tr class="hover:bg-slate-800/20 transition-all border-b border-slate-800">
+                    <td class="p-2 border-r border-slate-800 sticky-col cursor-pointer" onclick="toggleDetalhesTecnico('${t.RowKey}')">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] opacity-40 mr-1">${isExpanded ? '▼' : '▶'}</span>
+                                <strong class="text-white text-xs hover:underline uppercase">${t.Nome}</strong>
+                                <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${localInfo} (DDD ${t.DDD})</div>
+                            </div>
+                        </div>
+                        ${isExpanded ? `
+                            <div class="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-300 space-y-2 animate-fade-in bg-slate-950/40 p-2 rounded-lg" onclick="event.stopPropagation()">
+                                <div><strong>Login:</strong> ${t.RowKey}</div>
+                                <div><strong>Cidade:</strong> ${t.Cidade || "Não informada"}</div>
+                                <div><strong>Celular:</strong> ${t.Telefone || "Não informado"}</div>
+                                <div class="flex gap-1 pt-1">
+                                    <button onclick="copiarDadosTecnico('${t.Nome}', '${t.RowKey}', '${t.Cidade}', '${t.DDD}', '${t.Telefone}', this)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">📋 Copiar</button>
+                                    <button onclick="preencherEdicao('${t.RowKey}')" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">✏️ Editar Perfil</button>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </td>
+            `;
+
+            for (let dia = 1; dia <= totalDiasExibir; dia++) {
+                const diaFmt = `${configData.ano}-${String(configData.mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+                const diaDate = new Date(configData.ano, configData.mes - 1, dia);
+                const isDomingo = diaDate.getDay() === 0;
+
+                const isFuturoOuHoje = (configData.ano === hoje.getFullYear() && configData.mes === (hoje.getMonth() + 1) && dia >= hoje.getDate());
+
+                let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
+                if (isFuturoOuHoje) {
+                    bgClasse = "bg-slate-800/60 text-slate-400 hover:bg-slate-750/80 cursor-pointer";
+                }
+
+                let innerSymbol = "•"; 
+                let occurrenceObject = null;
+
+                if (isDomingo) {
+                    bgClasse = "domingo-cell cursor-not-allowed";
+                    innerSymbol = "D";
+                } else {
+                    const matchingOc = listaOcorrenciasGlobal.find(oc => {
+                        if (oc.Login !== t.RowKey) return false;
+                        const dIni = parseDateMidnight(oc.DataInicio);
+                        const dFim = parseDateMidnight(oc.DataFim);
+                        return (diaDate >= dIni && dFim >= diaDate);
+                    });
+
+                    if (matchingOc) {
+                        occurrenceObject = matchingOc;
+                        if (matchingOc.Ocorrencia === "Presente") {
+                            bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
+                            innerSymbol = "P";
+                        } else if (matchingOc.Ocorrencia === "Falta") {
+                            bgClasse = "bg-red-600 text-white font-bold hover:opacity-90 cursor-pointer";
+                            innerSymbol = matchingOc.Comentario ? "F 💬" : "F";
+                        } else if (matchingOc.Ocorrencia === "Atestado") {
+                            bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
+                            innerSymbol = "A";
+                        } else if (matchingOc.Ocorrencia === "Férias") {
+                            bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
+                            innerSymbol = "Ferias";
+                        }
+                    }
+                }
+
+                const comentarioTxt = occurrenceObject && occurrenceObject.Comentario ? occurrenceObject.Comentario.replace(/'/g, "\\'") : "";
+                
+                const clickAction = isDomingo ? 
+                    `alert('Domingo não trabalhamos!')` : 
+                    `abrirModalStatus('${t.RowKey}', '${t.Nome}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${occurrenceObject ? occurrenceObject.RowKey : ''}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}', '${comentarioTxt}')`;
+
+                rowHTML += `
+                    <td class="p-2 border-r border-slate-800 text-center ${bgClasse} text-[10px]" onclick="${clickAction}">
+                        ${innerSymbol}
+                    </td>
+                `;
+            }
+
+            rowHTML += `</tr>`;
+            return rowHTML;
+        }
+
         // --- RENDERIZAÇÃO DO QUADRO DE FREQUÊNCIA ---
         function renderizarGridFrequencia() {
             const header = document.getElementById('headerGridFrequencia');
@@ -825,98 +915,46 @@
 
             let corpoHTML = "";
 
-            tecnicosFiltrados.sort((a,b) => a.Nome.localeCompare(b.Nome)).forEach(t => {
-                const isExpanded = expandedTechLogins.has(t.RowKey);
-                
-                // Formatação limpa do nome da empresa e da cidade caso ela seja preenchida
-                const localInfo = t.Cidade ? `${t.Empresa} - ${t.Cidade}` : t.Empresa;
-
-                corpoHTML += `
-                    <tr class="hover:bg-slate-800/20 transition-all border-b border-slate-800">
-                        <td class="p-2 border-r border-slate-800 sticky-col cursor-pointer" onclick="toggleDetalhesTecnico('${t.RowKey}')">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <span class="text-[10px] opacity-40 mr-1">${isExpanded ? '▼' : '▶'}</span>
-                                    <strong class="text-white text-xs hover:underline uppercase">${t.Nome}</strong>
-                                    <!-- Cidade opcional exibida ao lado do nome da empresa de forma elegante -->
-                                    <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${localInfo} (DDD ${t.DDD})</div>
-                                </div>
-                            </div>
-                            ${isExpanded ? `
-                                <div class="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-300 space-y-2 animate-fade-in bg-slate-950/40 p-2 rounded-lg" onclick="event.stopPropagation()">
-                                    <div><strong>Login:</strong> ${t.RowKey}</div>
-                                    <div><strong>Cidade:</strong> ${t.Cidade || "Não informada"}</div>
-                                    <div><strong>Celular:</strong> ${t.Telefone || "Não informado"}</div>
-                                    <div class="flex gap-1 pt-1">
-                                        <button onclick="copiarDadosTecnico('${t.Nome}', '${t.RowKey}', '${t.Cidade}', '${t.DDD}', '${t.Telefone}', this)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">📋 Copiar</button>
-                                        <button onclick="preencherEdicao('${t.RowKey}')" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">✏️ Editar Perfil</button>
-                                    </div>
-                                </div>
-                            ` : ''}
-                        </td>
-                `;
-
-                for (let dia = 1; dia <= totalDiasExibir; dia++) {
-                    const diaFmt = `${configData.ano}-${String(configData.mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-                    const diaDate = new Date(configData.ano, configData.mes - 1, dia);
-                    const isDomingo = diaDate.getDay() === 0;
-
-                    // Dias futuros (da data de hoje em diante no mês atual) ficam cinza claro
-                    const isFuturoOuHoje = (configData.ano === hoje.getFullYear() && configData.mes === (hoje.getMonth() + 1) && dia >= hoje.getDate());
-
-                    let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
-                    if (isFuturoOuHoje) {
-                        bgClasse = "bg-slate-800/60 text-slate-400 hover:bg-slate-750/80 cursor-pointer";
+            // --- AGRUPAMENTO POR CIDADE QUANDO HOUVER EMPRESA FILTRADA ---
+            if (emp !== "Todos") {
+                const gruposPorCidade = {};
+                tecnicosFiltrados.forEach(t => {
+                    const cidade = t.Cidade ? t.Cidade.trim().toUpperCase() : "SEM CIDADE INFORMADA";
+                    if (!gruposPorCidade[cidade]) {
+                        gruposPorCidade[cidade] = [];
                     }
+                    gruposPorCidade[cidade].push(t);
+                });
 
-                    let innerSymbol = "•"; 
-                    let occurrenceObject = null;
+                // Ordena as cidades de forma alfabética (coloca Sem Cidade por último no grid)
+                const cidadesOrdenadas = Object.keys(gruposPorCidade).sort((a, b) => {
+                    if (a === "SEM CIDADE INFORMADA") return 1;
+                    if (b === "SEM CIDADE INFORMADA") return -1;
+                    return a.localeCompare(b);
+                });
 
-                    if (isDomingo) {
-                        bgClasse = "domingo-cell cursor-not-allowed";
-                        innerSymbol = "D";
-                    } else {
-                        const matchingOc = listaOcorrenciasGlobal.find(oc => {
-                            if (oc.Login !== t.RowKey) return false;
-                            const dIni = parseDateMidnight(oc.DataInicio);
-                            const dFim = parseDateMidnight(oc.DataFim);
-                            return (diaDate >= dIni && dFim >= diaDate);
-                        });
-
-                        if (matchingOc) {
-                            occurrenceObject = matchingOc;
-                            if (matchingOc.Ocorrencia === "Presente") {
-                                bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
-                                innerSymbol = "P";
-                            } else if (matchingOc.Ocorrencia === "Falta") {
-                                bgClasse = "bg-red-600 text-white font-bold hover:opacity-90 cursor-pointer";
-                                // Faltas justificadas mostram um ícone de balão de comentário
-                                innerSymbol = matchingOc.Comentario ? "F 💬" : "F";
-                            } else if (matchingOc.Ocorrencia === "Atestado") {
-                                bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
-                                innerSymbol = "A";
-                            } else if (matchingOc.Ocorrencia === "Férias") {
-                                bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
-                                innerSymbol = "Ferias";
-                            }
-                        }
-                    }
-
-                    const comentarioTxt = occurrenceObject && occurrenceObject.Comentario ? occurrenceObject.Comentario.replace(/'/g, "\\'") : "";
-                    
-                    const clickAction = isDomingo ? 
-                        `alert('Domingo não trabalhamos!')` : 
-                        `abrirModalStatus('${t.RowKey}', '${t.Nome}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${occurrenceObject ? occurrenceObject.RowKey : ''}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}', '${comentarioTxt}')`;
-
+                cidadesOrdenadas.forEach(cidade => {
+                    const totalColunasSpan = totalDiasExibir + 1;
+                    // Linha divisória contendo o nome da Cidade
                     corpoHTML += `
-                        <td class="p-2 border-r border-slate-800 text-center ${bgClasse} text-[10px]" onclick="${clickAction}">
-                            ${innerSymbol}
-                        </td>
+                        <tr class="bg-slate-800/80 border-t border-b border-slate-700/60">
+                            <td colspan="${totalColunasSpan}" class="p-2 text-slate-300 text-xs font-black uppercase tracking-wider">
+                                📍 Cidade: ${cidade} <span class="text-[10px] text-slate-400 font-mono">(${gruposPorCidade[cidade].length} ${gruposPorCidade[cidade].length === 1 ? 'técnico' : 'técnicos'})</span>
+                            </td>
+                        </tr>
                     `;
-                }
 
-                corpoHTML += `</tr>`;
-            });
+                    // Ordena os técnicos daquela cidade por nome
+                    gruposPorCidade[cidade].sort((a, b) => a.Nome.localeCompare(b.Nome)).forEach(t => {
+                        corpoHTML += gerarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje);
+                    });
+                });
+            } else {
+                // Sem agrupamento (filtro de empresa em "Todos") - ordena por Nome globalmente
+                tecnicosFiltrados.sort((a,b) => a.Nome.localeCompare(b.Nome)).forEach(t => {
+                    corpoHTML += gerarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje);
+                });
+            }
 
             corpo.innerHTML = corpoHTML;
             scrollParaDiaAtual(); // Centraliza a visualização do dia atual
