@@ -31,6 +31,7 @@ jobs:
           app_location: "/" # Raiz do repositório onde está o index.html
           api_location: "api" # INDICA A PASTA DA API PARA COMPILAÇÃO DO AZURE
           output_location: "." # Diretório de saída
+          skip_app_build: true # Evita que o Azure tente compilar o HTML como se fosse um app em Node.js
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
