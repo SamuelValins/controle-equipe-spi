@@ -132,7 +132,7 @@
             <div class="flex justify-between items-center p-4 bg-slate-800/80 border border-slate-700/50 rounded-xl cursor-pointer hover:bg-slate-750 transition-all select-none" onclick="togglePainelEmpresas()">
                 <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <span>🏢 Presenças por Empresa (Visão Geral Hoje)</span>
-                    <span id="badgeStatusEmpresas" class="bg-blue-600/20 text-blue-400 text-[9px] px-2 py-0.5 rounded font-bold uppercase transition-colors">Recolhido</span>
+                    <span id="badgeStatusEmpresas" class="bg-blue-600/20 text-blue-400 text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider transition-colors">Recolhido</span>
                 </h3>
                 <button id="btnToggleEmpresas" class="text-xs text-blue-400 hover:text-blue-300 font-bold uppercase">Expandir ▲</button>
             </div>
@@ -166,7 +166,7 @@
                         <p class="text-2xl font-black text-white mt-0.5" id="indicadorAfastados">0</p>
                     </div>
                 </div>
-                <span class="text-[9px] text-slate-400 uppercase font-bold" id="subIndicadorAusentes">Férias: (0) | Atestados: (0) | Faltas: (0)</span>
+                <span class="text-[9px] text-slate-400 uppercase font-bold" id="subIndicadorAusentes">Férias: (0) | Atestados: (0) | Faltas: (0) | Manut.: (0) | Trein.: (0) | Deslig.: (0)</span>
             </div>
         </section>
 
@@ -281,6 +281,9 @@
                         <option value="Falta">🔴 Falta (Vermelho)</option>
                         <option value="Atestado">🟡 Atestado (Amarelo)</option>
                         <option value="Férias">⚪ Férias (Cinza)</option>
+                        <option value="Manutenção">🟠 Manutenção (Laranja)</option>
+                        <option value="Treinamento">🔵 Treinamento (Azul Piscina)</option>
+                        <option value="Desligado">❌ Desligado (Vermelho Escuro)</option>
                     </select>
                 </div>
 
@@ -699,11 +702,14 @@
             let faltasHoje = 0;
             let feriasHoje = 0;
             let atestadoHoje = 0;
+            let manutencaoHoje = 0;
+            let treinamentoHoje = 0;
+            let desligadoHoje = 0;
 
             const resumoEmpresas = {};
             tecnicosAtivosFiltrados.forEach(t => {
                 if (!resumoEmpresas[t.Empresa]) {
-                    resumoEmpresas[t.Empresa] = { total: 0, trabalhando: 0, faltas: 0, ferias: 0, atestado: 0 };
+                    resumoEmpresas[t.Empresa] = { total: 0, trabalhando: 0, faltas: 0, ferias: 0, atestado: 0, manutencao: 0, treinamento: 0, desligado: 0 };
                 }
                 resumoEmpresas[t.Empresa].total++; // Totaliza o total de equipes cadastradas desta empresa
             });
@@ -737,6 +743,15 @@
                     } else if (ocHoje.Ocorrencia === "Férias") {
                         resumoEmpresas[empNome].ferias++;
                         feriasHoje++;
+                    } else if (ocHoje.Ocorrencia === "Manutenção") {
+                        resumoEmpresas[empNome].manutencao++;
+                        manutencaoHoje++;
+                    } else if (ocHoje.Ocorrencia === "Treinamento") {
+                        resumoEmpresas[empNome].treinamento++;
+                        treinamentoHoje++;
+                    } else if (ocHoje.Ocorrencia === "Desligado") {
+                        resumoEmpresas[empNome].desligado++;
+                        desligadoHoje++;
                     } else if (ocHoje.Ocorrencia === "Presente") {
                         resumoEmpresas[empNome].trabalhando++;
                         trabalhandoHoje++; // Trabalhando Hoje exibe apenas os que possuem presença explícita
@@ -760,18 +775,21 @@
                             <div class="text-red-400">🔴 Faltas: <span class="text-white font-black">${stats.faltas}</span></div>
                             <div class="text-slate-400">⚪ Férias: <span class="text-white font-black">${stats.ferias}</span></div>
                             <div class="text-amber-400 font-bold">🟡 Atest: <span class="text-white font-black">${stats.atestado}</span></div>
+                            <div class="text-orange-400 font-bold">🟠 Manut: <span class="text-white font-black">${stats.manutencao}</span></div>
+                            <div class="text-cyan-400 font-bold">🔵 Trein: <span class="text-white font-black">${stats.treinamento}</span></div>
+                            <div class="text-rose-500 font-bold">❌ Desl: <span class="text-white font-black">${stats.desligado}</span></div>
                         </div>
                     </div>
                 `;
             });
 
-            let totalAusentesHoje = faltasHoje + feriasHoje + atestadoHoje;
+            let totalAusentesHoje = faltasHoje + feriasHoje + atestadoHoje + manutencaoHoje + treinamentoHoje + desligadoHoje;
 
             document.getElementById('indicadorFaltasMes').innerText = totalFaltasMes;
             document.getElementById('indicadorAtivos').innerText = trabalhandoHoje;
             document.getElementById('subIndicadorAtivos').innerText = `De ${tecnicosAtivosFiltrados.length} ativos filtrados`;
             document.getElementById('indicadorAfastados').innerText = totalAusentesHoje;
-            document.getElementById('subIndicadorAusentes').innerText = `Férias: (${feriasHoje}) | Atestados: (${atestadoHoje}) | Faltas: (${faltasHoje})`;
+            document.getElementById('subIndicadorAusentes').innerText = `Férias: (${feriasHoje}) | Atestados: (${atestadoHoje}) | Faltas: (${faltasHoje}) | Manut.: (${manutencaoHoje}) | Trein.: (${treinamentoHoje}) | Deslig.: (${desligadoHoje})`;
         }
 
         // --- SISTEMA OPTIMISTIC UI: ATUALIZA MEMÓRIA LOCAL DE FORMA INSTANTÂNEA ---
@@ -955,6 +973,15 @@
                         } else if (matchingOc.Ocorrencia === "Férias") {
                             bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
                             innerSymbol = "Ferias";
+                        } else if (matchingOc.Ocorrencia === "Manutenção") {
+                            bgClasse = "bg-orange-500 text-white font-bold hover:opacity-90 cursor-pointer text-[9px]";
+                            innerSymbol = "M";
+                        } else if (matchingOc.Ocorrencia === "Treinamento") {
+                            bgClasse = "bg-cyan-600 text-white font-bold hover:opacity-90 cursor-pointer text-[9px]";
+                            innerSymbol = "T";
+                        } else if (matchingOc.Ocorrencia === "Desligado") {
+                            bgClasse = "bg-red-950 text-red-400 font-bold line-through hover:opacity-90 cursor-pointer text-[8px]";
+                            innerSymbol = "Desl";
                         }
                     }
                 }
@@ -1037,7 +1064,7 @@
                 return true;
             });
 
-            // Atualiza de forma dinâmica o total de técnicos geral exibido no badge do Quadro Geral
+            // Updates dynamic general teams counts
             const badgeGeral = document.getElementById('badgeTotalEquipesGeral');
             if (badgeGeral) {
                 badgeGeral.innerText = `${tecnicosFiltrados.length} ${tecnicosFiltrados.length === 1 ? 'Equipe' : 'Equipes'}`;
@@ -1180,7 +1207,7 @@
 
             comInput.value = comentario || "";
 
-            if (statusAtual === "Presente" || statusAtual === "Falta" || statusAtual === "Limpar") {
+            if (statusAtual === "Presente" || statusAtual === "Falta" || statusAtual === "Limpar" || statusAtual === "Manutenção" || statusAtual === "Desligado") {
                 dIniInput.value = dataStr;
                 dFimInput.value = dataStr;
             } else {
@@ -1211,12 +1238,13 @@
                 commentContainer.classList.add('hidden');
             }
 
-            if (val === "Presente" || val === "Falta" || val === "Limpar") {
+            // Status que operam em data única
+            if (val === "Presente" || val === "Falta" || val === "Limpar" || val === "Manutenção" || val === "Desligado") {
                 singleContainer.classList.remove('hidden');
                 periodContainer.classList.add('hidden');
                 dIni.required = false;
                 dFim.required = false;
-            } else {
+            } else { // Status que trabalham em período multi-data
                 singleContainer.classList.add('hidden');
                 periodContainer.classList.remove('hidden');
                 dIni.required = true;
@@ -1238,7 +1266,15 @@
             let dInicio = dataAlvo;
             let dFim = dataAlvo;
 
-            if (status !== "Falta" && status !== "Presente" && status !== "Limpar") {
+            // Tratamento especial para o status "Desligado" - replica para o resto do mês
+            if (status === "Desligado") {
+                const [anoStr, mesStr, diaStr] = dataAlvo.split('-');
+                const ano = parseInt(anoStr, 10);
+                const mes = parseInt(mesStr, 10);
+                const ultimoDia = new Date(ano, mes, 0).getDate();
+                dInicio = dataAlvo;
+                dFim = `${anoStr}-${mesStr}-${String(ultimoDia).padStart(2, '0')}`;
+            } else if (status !== "Falta" && status !== "Presente" && status !== "Limpar" && status !== "Manutenção") {
                 dInicio = document.getElementById('statusDataInicio').value;
                 dFim = document.getElementById('statusDataFim').value;
             }
