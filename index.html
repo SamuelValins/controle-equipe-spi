@@ -935,11 +935,13 @@
 
                 cidadesOrdenadas.forEach(cidade => {
                     const totalColunasSpan = totalDiasExibir + 1;
-                    // Linha divisória contendo o nome da Cidade
+                    // Linha divisória contendo o nome da Cidade - Estilizada em tom Índigo e com congelamento horizontal inteligente
                     corpoHTML += `
-                        <tr class="bg-slate-800/80 border-t border-b border-slate-700/60">
-                            <td colspan="${totalColunasSpan}" class="p-2 text-slate-300 text-xs font-black uppercase tracking-wider">
-                                📍 Cidade: ${cidade} <span class="text-[10px] text-slate-400 font-mono">(${gruposPorCidade[cidade].length} ${gruposPorCidade[cidade].length === 1 ? 'técnico' : 'técnicos'})</span>
+                        <tr class="bg-indigo-950/70 border-t border-b border-indigo-500/30">
+                            <td colspan="${totalColunasSpan}" class="p-2 text-indigo-300 text-xs font-black uppercase tracking-wider">
+                                <div class="sticky left-2 inline-block">
+                                    📍 Cidade: ${cidade} <span class="text-[10px] text-indigo-400/80 font-mono">(${gruposPorCidade[cidade].length} ${gruposPorCidade[cidade].length === 1 ? 'técnico' : 'técnicos'})</span>
+                                </div>
                             </td>
                         </tr>
                     `;
