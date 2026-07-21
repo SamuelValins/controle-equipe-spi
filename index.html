@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle de Equipe - Escala Mensal</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS para Leitura de Planilhas Excel (.XLSX) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
     <style>
         :root {
             --cor-primaria: #4a90e2;
@@ -80,6 +84,7 @@
                 <p class="text-xs text-slate-400 font-bold uppercase mt-0.5">Controle integrado com segurança máxima via API</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
+                <button onclick="abrirModalConfiguracoes()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1.5 px-3 rounded-lg text-xs flex items-center gap-1.5 border border-slate-600 transition-colors">⚙️ Configurar</button>
                 <div class="flex flex-col">
                     <label class="text-[9px] text-slate-400 font-bold uppercase">Mês de Referência</label>
                     <input type="month" id="filtroMesAno" class="bg-slate-900 border border-slate-700 rounded-lg text-white px-3 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -88,7 +93,7 @@
         </header>
 
         <!-- Filtros Rápidos -->
-        <section class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-800/40 border border-slate-700/40 rounded-xl">
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-800/40 border border-slate-700/40 rounded-xl">
             <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filtrar por Responsável</label>
                 <select id="filtroResponsavel" onchange="selecionarDddsPorResponsavel()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 text-xs">
@@ -111,9 +116,6 @@
                     <!-- Gerado via JS -->
                 </div>
             </div>
-            <div class="flex items-end">
-                <button onclick="abrirModalCadastro()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-xs transition-colors">+ Cadastrar Técnico</button>
-            </div>
         </section>
 
         <!-- Painel Consolidado de Frequência por Empresa Hoje (Cabeçalho Acordeão) -->
@@ -132,6 +134,14 @@
 
         <!-- Indicadores Resumidos (Responsivos aos Filtros) -->
         <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Total de Faltas no Mês (Esquerda) -->
+            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-red-500 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Total de Faltas no Mês</p>
+                    <p class="text-2xl font-black text-white mt-0.5" id="indicadorFaltasMes">0</p>
+                </div>
+            </div>
+            <!-- Trabalhando Hoje (Meio) -->
             <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-blue-500 flex justify-between items-center">
                 <div>
                     <p class="text-[10px] font-bold text-slate-400 uppercase">Trabalhando Hoje</p>
@@ -139,17 +149,15 @@
                 </div>
                 <span class="text-xs text-slate-500 font-mono" id="subIndicadorAtivos">De 0 ativos</span>
             </div>
-            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-red-500 flex justify-between items-center">
-                <div>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Total de Faltas no Mês</p>
-                    <p class="text-2xl font-black text-white mt-0.5" id="indicadorFaltasMes">0</p>
+            <!-- Ausentes Hoje (Direita) -->
+            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-amber-500 flex flex-col justify-between items-start gap-1">
+                <div class="flex justify-between items-center w-full">
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase">Ausentes Hoje</p>
+                        <p class="text-2xl font-black text-white mt-0.5" id="indicadorAfastados">0</p>
+                    </div>
                 </div>
-            </div>
-            <div class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl shadow-lg border-l-4 border-amber-500 flex justify-between items-center">
-                <div>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Afastados Hoje (Férias/Atestado)</p>
-                    <p class="text-2xl font-black text-white mt-0.5" id="indicadorAfastados">0</p>
-                </div>
+                <span class="text-[9px] text-slate-400 uppercase font-bold" id="subIndicadorAusentes">Férias: (0) | Atestados: (0) | Faltas: (0)</span>
             </div>
         </section>
 
@@ -165,7 +173,7 @@
             </div>
 
             <!-- Tabela de Alta Capacidade com Barra de Rolagem Horizontal Congelada -->
-            <div class="overflow-x-auto overflow-y-auto custom-scrollbar rounded-xl border border-slate-700/70 max-h-[72vh] lg:max-h-[calc(100vh-320px)]" style="max-width: 100%;">
+            <div id="tabelaContainerScroll" class="overflow-x-auto overflow-y-auto custom-scrollbar rounded-xl border border-slate-700/70 max-h-[72vh] lg:max-h-[calc(100vh-320px)]" style="max-width: 100%;">
                 <table class="min-w-full text-xs text-left border-collapse">
                     <thead class="bg-slate-900 text-slate-400 uppercase font-bold sticky top-0 z-20" id="headerGridFrequencia">
                         <!-- Gerado Dinamicamente -->
@@ -213,8 +221,8 @@
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Celular</label>
-                        <input type="text" id="tecTelefone" required placeholder="13999998888" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Celular (Opcional)</label>
+                        <input type="text" id="tecTelefone" placeholder="13999998888" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status Geral</label>
@@ -259,6 +267,12 @@
                     </select>
                 </div>
 
+                <!-- Campo exclusivo para comentários sobre Falta -->
+                <div id="statusComentarioContainer" class="hidden">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Justificativa / Comentário da Falta</label>
+                    <textarea id="statusComentario" placeholder="Escreva o motivo da ausência..." class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 h-16"></textarea>
+                </div>
+
                 <div id="statusDataUnicaContainer">
                     <p class="text-[10px] text-slate-400">A alteração será aplicada especificamente no dia selecionado.</p>
                 </div>
@@ -279,6 +293,45 @@
                     <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500">Salvar Status</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: PAINEL DE CONFIGURAÇÕES -->
+    <div id="modalConfiguracoes" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+            <div class="bg-slate-900 p-4 flex justify-between items-center border-b border-slate-700">
+                <h3 class="text-white font-black uppercase text-xs">Painel de Configurações</h3>
+                <button onclick="fecharModalConfiguracoes()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+            <div class="p-6 space-y-4 text-xs text-slate-300">
+                <p class="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-700 pb-1">Gerenciamento de Técnicos</p>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="abrirModalCadastroDireto()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-xs transition-colors">+ Cadastrar Técnico Manualmente</button>
+                    
+                    <div class="mt-2">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Importar Planilha XLSX</label>
+                        <input type="file" id="xlsxFileInput" accept=".xlsx, .xls" onchange="processarXlsx(event)" class="hidden">
+                        <button onclick="document.getElementById('xlsxFileInput').click()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-2">📥 Importar Planilha (.XLSX)</button>
+                    </div>
+
+                    <!-- Progresso da Importação -->
+                    <div id="xlsxProgressContainer" class="hidden mt-2 p-3 bg-slate-950/50 border border-slate-700/50 rounded-lg text-center">
+                        <div class="spinner w-4 h-4 border-t-2 border-blue-500 rounded-full animate-spin mx-auto mb-1"></div>
+                        <span id="xlsxProgressText" class="text-[10px] font-bold text-blue-400 uppercase">Processando planilha...</span>
+                    </div>
+                </div>
+
+                <p class="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-700 pt-2 pb-1">Configurações Gerais e Funcionalidades</p>
+                <div class="space-y-1.5 text-[10px] text-slate-400">
+                    <div>• <strong>Destaque em Cinza Claro:</strong> Dias futuros até o final do mês destacados de forma leve para fácil visualização.</div>
+                    <div>• <strong>Comentários de Faltas:</strong> Justifique faltas e visualize ao clicar em células marcadas com 💬.</div>
+                    <div>• <strong>Centralização de Data:</strong> Centraliza a visualização no dia atual automaticamente.</div>
+                </div>
+
+                <div class="flex justify-end pt-2 border-t border-slate-700">
+                    <button onclick="fecharModalConfiguracoes()" class="px-4 py-2 bg-slate-700 text-slate-300 font-bold rounded-lg hover:bg-slate-600">Fechar Painel</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -330,6 +383,29 @@
                 expandedTechLogins.add(login);
             }
             renderizarGridFrequencia();
+        }
+
+        // Centraliza a barra de rolagem no dia atual caso estejamos no mês corrente
+        function scrollParaDiaAtual() {
+            setTimeout(() => {
+                const container = document.getElementById('tabelaContainerScroll');
+                if (!container) return;
+
+                const configData = obterDataFiltro();
+                const hoje = new Date();
+                const isMesAtual = (configData.ano === hoje.getFullYear() && configData.mes === (hoje.getMonth() + 1));
+
+                if (isMesAtual) {
+                    const diaAtual = hoje.getDate();
+                    const offsetColunaTecnico = 250; // Largura aproximada da primeira coluna
+                    const larguraColunaDia = 34;    // Largura aproximada de cada coluna de dia
+                    const posicaoDia = offsetColunaTecnico + (diaAtual * larguraColunaDia);
+                    
+                    const larguraVisivel = container.clientWidth;
+                    const scrollAlvo = posicaoDia - (larguraVisivel / 2);
+                    container.scrollLeft = scrollAlvo > 0 ? scrollAlvo : 0;
+                }
+            }, 300);
         }
 
         function parseDateMidnight(dateStr) {
@@ -397,7 +473,7 @@
 
         // --- COPIAR DADOS DO TÉCNICO ---
         function copiarDadosTecnico(nome, login, cidade, ddd, telefone, btnElement) {
-            const formatado = `Nome: ${nome}\nLogin: ${login}\nCidade: ${cidade}\nDDD: ${ddd}\nTelefone: ${telefone}`;
+            const formatado = `Nome: ${nome}\nLogin: ${login}\nCidade: ${cidade}\nDDD: ${ddd}\nTelefone: ${telefone || "Não informado"}`;
             navigator.clipboard.writeText(formatado).then(() => {
                 const orig = btnElement.innerText;
                 btnElement.innerText = "📋 Copiado!";
@@ -522,9 +598,13 @@
             const hojeStr = hoje.toISOString().split('T')[0];
             const hojeDate = parseDateMidnight(hojeStr);
 
-            let totalAfastadosHoje = 0;
             let totalFaltasMes = 0;
-            const loginsAfastadosHoje = new Set();
+            
+            // Contadores para o dia de hoje
+            let trabalhandoHoje = 0;
+            let faltasHoje = 0;
+            let feriasHoje = 0;
+            let atestadoHoje = 0;
 
             const resumoEmpresas = {};
             tecnicosAtivosFiltrados.forEach(t => {
@@ -533,21 +613,9 @@
                 }
             });
 
+            // Totaliza as faltas registradas ao longo do mês completo
             listaOcorrenciasGlobal.forEach(oc => {
                 if (!loginsAtivosSet.has(oc.Login)) return;
-
-                const dIni = parseDateMidnight(oc.DataInicio);
-                const dFim = parseDateMidnight(oc.DataFim);
-
-                const ativoHoje = (hojeDate >= dIni && dFim >= hojeDate);
-
-                if (ativoHoje) {
-                    if (oc.Ocorrencia === "Férias" || oc.Ocorrencia === "Atestado" || oc.Ocorrencia === "Falta") {
-                        loginsAfastadosHoje.add(oc.Login);
-                        totalAfastadosHoje++;
-                    }
-                }
-
                 if (oc.Ocorrencia === "Falta") {
                     totalFaltasMes++;
                 }
@@ -565,12 +633,19 @@
                 });
 
                 if (ocHoje) {
-                    if (ocHoje.Ocorrencia === "Falta") resumoEmpresas[empNome].faltas++;
-                    else if (ocHoje.Ocorrencia === "Atestado") resumoEmpresas[empNome].atestado++;
-                    else if (ocHoje.Ocorrencia === "Férias") resumoEmpresas[empNome].ferias++;
-                    else if (ocHoje.Ocorrencia === "Presente") resumoEmpresas[empNome].trabalhando++;
-                } else {
-                    resumoEmpresas[empNome].trabalhando++; 
+                    if (ocHoje.Ocorrencia === "Falta") {
+                        resumoEmpresas[empNome].faltas++;
+                        faltasHoje++;
+                    } else if (ocHoje.Ocorrencia === "Atestado") {
+                        resumoEmpresas[empNome].atestado++;
+                        atestadoHoje++;
+                    } else if (ocHoje.Ocorrencia === "Férias") {
+                        resumoEmpresas[empNome].ferias++;
+                        feriasHoje++;
+                    } else if (ocHoje.Ocorrencia === "Presente") {
+                        resumoEmpresas[empNome].trabalhando++;
+                        trabalhandoHoje++; // Trabalhando Hoje exibe apenas os que possuem presença explícita
+                    }
                 }
             });
 
@@ -591,12 +666,75 @@
                 `;
             });
 
-            const totalAtivosTrabalhando = tecnicosAtivosFiltrados.length - loginsAfastadosHoje.size;
+            let totalAusentesHoje = faltasHoje + feriasHoje + atestadoHoje;
 
-            document.getElementById('indicadorAtivos').innerText = totalAtivosTrabalhando >= 0 ? totalAtivosTrabalhando : 0;
-            document.getElementById('subIndicadorAtivos').innerText = `De ${tecnicosAtivosFiltrados.length} ativos filtrados`;
             document.getElementById('indicadorFaltasMes').innerText = totalFaltasMes;
-            document.getElementById('indicadorAfastados').innerText = totalAfastadosHoje;
+            document.getElementById('indicadorAtivos').innerText = trabalhandoHoje;
+            document.getElementById('subIndicadorAtivos').innerText = `De ${tecnicosAtivosFiltrados.length} ativos filtrados`;
+            document.getElementById('indicadorAfastados').innerText = totalAusentesHoje;
+            document.getElementById('subIndicadorAusentes').innerText = `Férias: (${feriasHoje}) | Atestados: (${atestadoHoje}) | Faltas: (${faltasHoje})`;
+        }
+
+        // --- ATRIBUIR PRESENÇA EM MASSA ---
+        async function atribuirPresencaMassa(dataStr) {
+            const emp = document.getElementById('filtroEmpresa').value;
+            if (emp === "Todos") return;
+
+            const tecnicosAlvo = listaTecnicosGlobal.filter(t => {
+                if (t.Status !== "Ativo") return false;
+                if (t.Empresa !== emp) return false;
+                if (!selectedDddsSet.has(t.DDD)) return false;
+                return true;
+            });
+
+            if (tecnicosAlvo.length === 0) {
+                alert("Nenhum técnico ativo para esta empresa neste filtro.");
+                return;
+            }
+
+            if (!confirm(`Deseja atribuir presença automática para os ${tecnicosAlvo.length} técnicos ativos no dia ${dataStr.split('-').reverse().join('/')}?`)) {
+                return;
+            }
+
+            document.getElementById('loadingSpinner').classList.remove('hidden');
+            let totalSuccess = 0;
+
+            for (let i = 0; i < tecnicosAlvo.length; i++) {
+                const t = tecnicosAlvo[i];
+                const partitionNew = dataStr.replace(/-/g, '').substring(0, 6);
+                const rKeyNew = `${t.RowKey}_Presente_${dataStr.replace(/-/g, '')}`;
+
+                const corpo = {
+                    Login: t.RowKey,
+                    Nome: t.Nome,
+                    Empresa: t.Empresa,
+                    Ocorrencia: "Presente",
+                    DataInicio: dataStr,
+                    DataFim: dataStr
+                };
+
+                const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
+
+                try {
+                    const res = await fetch(url, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(corpo)
+                    });
+
+                    if (res.ok) {
+                        totalSuccess++;
+                    }
+                } catch (err) {
+                    console.error("Erro na presença em massa:", t.Nome, err);
+                }
+            }
+
+            alert(`Presença em massa concluída para ${totalSuccess} técnicos!`);
+            carregarPainelSincronizado();
         }
 
         // --- RENDERIZAÇÃO DO QUADRO DE FREQUÊNCIA ---
@@ -615,6 +753,8 @@
                 totalDiasExibir = hoje.getDate(); 
             }
 
+            const emp = document.getElementById('filtroEmpresa').value;
+
             let headerHTML = `
                 <tr>
                     <th class="p-3 bg-slate-900 border-r border-slate-700 text-left sticky-col sticky top-0 z-30" style="min-width: 250px;">Técnico / Empresa / DDD</th>
@@ -626,17 +766,23 @@
                 const isDomingo = diaSemana === 0;
                 const labelDia = String(dia).padStart(2, '0');
                 const weekLabel = ["D", "S", "T", "Q", "Q", "S", "S"][diaSemana];
+                const diaFmt = `${configData.ano}-${String(configData.mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+
+                let btnMassa = "";
+                // Atribuição de presença em massa habilitada caso uma empresa esteja selecionada (e não seja domingo)
+                if (emp !== "Todos" && !isDomingo) {
+                    btnMassa = `<button onclick="atribuirPresencaMassa('${diaFmt}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-400 hover:text-white px-1 py-0.5 rounded text-[8px] font-bold block mx-auto mt-1 tracking-wider transition-colors" title="Presença em Massa">P+</button>`;
+                }
 
                 headerHTML += `
                     <th class="p-2 text-center border-r border-slate-800 text-[10px] min-w-[34px] ${isDomingo ? 'text-red-400 font-bold bg-slate-900' : ''}">
                         ${labelDia}<br><span class="opacity-50 text-[8px]">${weekLabel}</span>
+                        ${btnMassa}
                     </th>
                 `;
             }
             headerHTML += `</tr>`;
             header.innerHTML = headerHTML;
-
-            const emp = document.getElementById('filtroEmpresa').value;
 
             const tecnicosFiltrados = listaTecnicosGlobal.filter(t => {
                 if (emp !== "Todos" && t.Empresa !== emp) return false;
@@ -661,14 +807,15 @@
                                 <div>
                                     <span class="text-[10px] opacity-40 mr-1">${isExpanded ? '▼' : '▶'}</span>
                                     <strong class="text-white text-xs hover:underline uppercase">${t.Nome}</strong>
-                                    <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${t.Empresa} (DDD ${t.DDD})</div>
+                                    <!-- Cidade exibida ao lado do nome da empresa -->
+                                    <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${t.Empresa} - ${t.Cidade} (DDD ${t.DDD})</div>
                                 </div>
                             </div>
                             ${isExpanded ? `
                                 <div class="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-300 space-y-2 animate-fade-in bg-slate-950/40 p-2 rounded-lg" onclick="event.stopPropagation()">
                                     <div><strong>Login:</strong> ${t.RowKey}</div>
                                     <div><strong>Cidade:</strong> ${t.Cidade}</div>
-                                    <div><strong>Celular:</strong> ${t.Telefone}</div>
+                                    <div><strong>Celular:</strong> ${t.Telefone || "Não informado"}</div>
                                     <div class="flex gap-1 pt-1">
                                         <button onclick="copiarDadosTecnico('${t.Nome}', '${t.RowKey}', '${t.Cidade}', '${t.DDD}', '${t.Telefone}', this)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">📋 Copiar</button>
                                         <button onclick="preencherEdicao('${t.RowKey}')" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">✏️ Editar Perfil</button>
@@ -683,8 +830,14 @@
                     const diaDate = new Date(configData.ano, configData.mes - 1, dia);
                     const isDomingo = diaDate.getDay() === 0;
 
-                    // Ajustado para TRANSPARENTE/AZUL BEM CLARO por padrão
+                    // Dias futuros (da data de hoje em diante no mês atual) ficam cinza claro
+                    const isFuturoOuHoje = (configData.ano === hoje.getFullYear() && configData.mes === (hoje.getMonth() + 1) && dia >= hoje.getDate());
+
                     let bgClasse = "bg-blue-950/10 text-slate-500/50 hover:bg-blue-950/30 cursor-pointer";
+                    if (isFuturoOuHoje) {
+                        bgClasse = "bg-slate-800/60 text-slate-400 hover:bg-slate-750/80 cursor-pointer";
+                    }
+
                     let innerSymbol = "•"; 
                     let occurrenceObject = null;
 
@@ -702,26 +855,27 @@
                         if (matchingOc) {
                             occurrenceObject = matchingOc;
                             if (matchingOc.Ocorrencia === "Presente") {
-                                // PINTA DE AZUL MAIS FORTE quando preenchido explicitamente como presente
                                 bgClasse = "bg-blue-600/40 text-blue-300 font-bold hover:bg-blue-500/60 cursor-pointer";
                                 innerSymbol = "P";
                             } else if (matchingOc.Ocorrencia === "Falta") {
                                 bgClasse = "bg-red-600 text-white font-bold hover:opacity-90 cursor-pointer";
-                                innerSymbol = "F";
+                                // Faltas justificadas mostram um ícone de balão de comentário
+                                innerSymbol = matchingOc.Comentario ? "F 💬" : "F";
                             } else if (matchingOc.Ocorrencia === "Atestado") {
                                 bgClasse = "bg-amber-500 text-slate-900 font-black hover:opacity-90 cursor-pointer";
                                 innerSymbol = "A";
                             } else if (matchingOc.Ocorrencia === "Férias") {
-                                // Exibe a palavra "Ferias" completa com fonte reduzida para caber no quadradinho
                                 bgClasse = "bg-slate-500 text-white font-bold hover:opacity-90 cursor-pointer text-[8px] whitespace-nowrap px-0.5";
                                 innerSymbol = "Ferias";
                             }
                         }
                     }
 
+                    const comentarioTxt = occurrenceObject && occurrenceObject.Comentario ? occurrenceObject.Comentario.replace(/'/g, "\\'") : "";
+                    
                     const clickAction = isDomingo ? 
                         `alert('Domingo não trabalhamos!')` : 
-                        `abrirModalStatus('${t.RowKey}', '${t.Nome}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${occurrenceObject ? occurrenceObject.RowKey : ''}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}')`;
+                        `abrirModalStatus('${t.RowKey}', '${t.Nome}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${occurrenceObject ? occurrenceObject.RowKey : ''}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}', '${comentarioTxt}')`;
 
                     corpoHTML += `
                         <td class="p-2 border-r border-slate-800 text-center ${bgClasse} text-[10px]" onclick="${clickAction}">
@@ -734,9 +888,23 @@
             });
 
             corpo.innerHTML = corpoHTML;
+            scrollParaDiaAtual(); // Centraliza a visualização do dia atual
         }
 
         // --- SISTEMA DE MODAIS & POPUPS ---
+        function abrirModalConfiguracoes() {
+            document.getElementById('modalConfiguracoes').classList.remove('hidden');
+        }
+
+        function fecharModalConfiguracoes() {
+            document.getElementById('modalConfiguracoes').classList.add('hidden');
+        }
+
+        function abrirModalCadastroDireto() {
+            fecharModalConfiguracoes();
+            abrirModalCadastro();
+        }
+
         function abrirModalCadastro() {
             document.getElementById('tituloModalCadastro').innerText = "Registrar Novo Técnico";
             document.getElementById('formTecnico').reset();
@@ -748,8 +916,13 @@
             document.getElementById('modalCadastro').classList.add('hidden');
         }
 
-        function abrirModalStatus(login, nome, dataStr, statusAtual, rowKey, dIni, dFim) {
-            document.getElementById('descModalStatus').innerHTML = `<strong>Técnico:</strong> ${nome}<br><strong>Data clicada:</strong> ${dataStr.split('-').reverse().join('/')}`;
+        function abrirModalStatus(login, nome, dataStr, statusAtual, rowKey, dIni, dFim, comentario) {
+            let descHtml = `<strong>Técnico:</strong> ${nome}<br><strong>Data clicada:</strong> ${dataStr.split('-').reverse().join('/')}`;
+            if (comentario) {
+                descHtml += `<br><div class="mt-2 p-2 bg-slate-900 rounded border border-red-500/30 text-slate-300">💬 <strong>Comentário da Falta:</strong> ${comentario}</div>`;
+            }
+            
+            document.getElementById('descModalStatus').innerHTML = descHtml;
             document.getElementById('statusLogin').value = login;
             document.getElementById('statusDataAlvo').value = dataStr;
             document.getElementById('statusRowKeyExistente').value = rowKey;
@@ -759,6 +932,9 @@
 
             const dIniInput = document.getElementById('statusDataInicio');
             const dFimInput = document.getElementById('statusDataFim');
+            const comInput = document.getElementById('statusComentario');
+
+            comInput.value = comentario || "";
 
             if (statusAtual === "Presente" || statusAtual === "Falta" || statusAtual === "Limpar") {
                 dIniInput.value = dataStr;
@@ -780,9 +956,16 @@
             const val = document.getElementById('statusSelect').value;
             const singleContainer = document.getElementById('statusDataUnicaContainer');
             const periodContainer = document.getElementById('statusPeriodoContainer');
+            const commentContainer = document.getElementById('statusComentarioContainer');
 
             const dIni = document.getElementById('statusDataInicio');
             const dFim = document.getElementById('statusDataFim');
+
+            if (val === "Falta") {
+                commentContainer.classList.remove('hidden');
+            } else {
+                commentContainer.classList.add('hidden');
+            }
 
             if (val === "Presente" || val === "Falta" || val === "Limpar") {
                 singleContainer.classList.remove('hidden');
@@ -808,7 +991,6 @@
             const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
             if (!tec) return;
 
-            // O novo formato de URL baseado em Query Params [2]
             if (status === "Limpar") {
                 if (rowKeyExistente) {
                     const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
@@ -852,7 +1034,11 @@
                     DataFim: dFim
                 };
 
-                // Enviamos no padrão de Query Parameters, eliminando caminhos na URL [2]
+                // Adiciona o comentário caso seja uma falta
+                if (status === "Falta") {
+                    corpo.Comentario = document.getElementById('statusComentario').value.trim();
+                }
+
                 const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
 
                 try {
@@ -881,7 +1067,6 @@
         }
 
         async function apagarRegistroAzure(tabela, partition, rowKey) {
-            // Enviamos no padrão de Query Parameters, eliminando caminhos na URL [2]
             const url = `/api/equipe?PartitionKey=${partition}&RowKey=${rowKey}`;
             try {
                 await fetch(url, {
@@ -905,7 +1090,7 @@
             document.getElementById('tecEmpresa').value = tec.Empresa;
             document.getElementById('tecCidade').value = tec.Cidade;
             document.getElementById('tecDdd').value = tec.DDD;
-            document.getElementById('tecTelefone').value = tec.Telefone;
+            document.getElementById('tecTelefone').value = tec.Telefone || "";
             document.getElementById('tecStatus').value = tec.Status;
             
             document.getElementById('modalCadastro').classList.remove('hidden');
@@ -924,7 +1109,6 @@
                 Status: document.getElementById('tecStatus').value
             };
 
-            // Enviamos no padrão de Query Parameters, eliminando caminhos na URL [2]
             const url = `/api/equipe?PartitionKey=PERFIL&RowKey=${login}`;
 
             try {
@@ -948,6 +1132,98 @@
             } catch (err) {
                 alert("Erro ao gravar técnico: " + err.message);
             }
+        }
+
+        // --- CARREGAR PLANILHA XLSX ---
+        function processarXlsx(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheetName = workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[sheetName];
+                    const rows = XLSX.utils.sheet_to_json(sheet);
+
+                    if (rows.length === 0) {
+                        alert("Nenhuma linha válida encontrada na planilha.");
+                        return;
+                    }
+
+                    document.getElementById('xlsxProgressContainer').classList.remove('hidden');
+                    const progressText = document.getElementById('xlsxProgressText');
+
+                    let total = rows.length;
+                    let importados = 0;
+
+                    for (let i = 0; i < rows.length; i++) {
+                        const row = rows[i];
+
+                        const nomeRaw = row['NOME'] || row['Nome'] || row['nome'];
+                        const loginRaw = row['LOGIN'] || row['Login'] || row['login'];
+                        let parceiraRaw = row['PARCEIRA'] || row['Parceira'] || row['Empresa'] || row['EMPRESA'];
+                        const dddRaw = row['DDD'] || row['Ddd'] || row['ddd'];
+                        const cidadeRaw = row['CIDADE'] || row['Cidade'] || row['cidade'] || "BAURU";
+
+                        if (!nomeRaw) continue;
+
+                        const nome = String(nomeRaw).trim();
+                        const login = loginRaw ? String(loginRaw).trim().toUpperCase().replace(/[^a-zA-Z0-9]/g, '') : "TEC" + Math.floor(Math.random() * 100000);
+                        
+                        let parceira = parceiraRaw ? String(parceiraRaw).trim() : "DANLEX";
+                        if (parceira.toUpperCase().includes("DANLEX")) {
+                            parceira = "DANLEX";
+                        } else if (parceira.toUpperCase().includes("BASIC")) {
+                            parceira = "BASIC";
+                        }
+
+                        const ddd = dddRaw ? String(dddRaw).trim() : "14";
+                        const cidade = String(cidadeRaw).trim().toUpperCase();
+
+                        const corpo = {
+                            Nome: nome,
+                            Empresa: parceira,
+                            Cidade: cidade,
+                            DDD: ddd,
+                            Telefone: "", // Telefone passa a ser opcional
+                            Status: "Ativo"
+                        };
+
+                        const url = `/api/equipe?PartitionKey=PERFIL&RowKey=${login}`;
+
+                        try {
+                            const res = await fetch(url, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json'
+                                },
+                                body: JSON.stringify(corpo)
+                            });
+
+                            if (res.ok) {
+                                importados++;
+                            }
+                        } catch (err) {
+                            console.error("Erro ao carregar técnico:", nome, err);
+                        }
+
+                        progressText.innerText = `Processando: ${importados} de ${total} técnicos...`;
+                    }
+
+                    alert(`Importação concluída! ${importados} técnicos foram cadastrados com sucesso.`);
+                    document.getElementById('xlsxProgressContainer').classList.add('hidden');
+                    fecharModalConfiguracoes();
+                    carregarPainelSincronizado();
+
+                } catch (error) {
+                    alert("Erro ao ler planilha: " + error.message);
+                }
+            };
+            reader.readAsBinaryString(file);
         }
     </script>
 </body>
