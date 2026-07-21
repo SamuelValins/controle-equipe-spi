@@ -84,6 +84,10 @@
                 <p class="text-xs text-slate-400 font-bold uppercase mt-0.5">Controle integrado com segurança máxima via API</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
+                <!-- Status de Sincronização em Background -->
+                <div id="statusSincronizacaoFundo" class="hidden text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-bold uppercase animate-pulse">
+                    <span>⏳ Sincronizando: <span id="qtdPendentesFundo">0</span> pendente(s)</span>
+                </div>
                 <button onclick="abrirModalConfiguracoes()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1.5 px-3 rounded-lg text-xs flex items-center gap-1.5 border border-slate-600 transition-colors">⚙️ Configurar</button>
                 <div class="flex flex-col">
                     <label class="text-[9px] text-slate-400 font-bold uppercase">Mês de Referência</label>
@@ -93,7 +97,12 @@
         </header>
 
         <!-- Filtros Rápidos -->
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-800/40 border border-slate-700/40 rounded-xl">
+        <section class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-800/40 border border-slate-700/40 rounded-xl">
+            <!-- Novo Filtro de Pesquisa -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Pesquisar Técnico</label>
+                <input type="text" id="filtroPesquisa" oninput="aplicarFiltrosLocal()" placeholder="Nome ou login..." class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filtrar por Responsável</label>
                 <select id="filtroResponsavel" onchange="selecionarDddsPorResponsavel()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-white p-2 text-xs">
@@ -235,9 +244,15 @@
                         </select>
                     </div>
                 </div>
-                <div class="flex justify-end gap-2 pt-2">
-                    <button type="button" onclick="fecharModalCadastro()" class="px-4 py-2 bg-slate-700 text-slate-300 font-bold rounded-lg hover:bg-slate-600">Cancelar</button>
-                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500">Salvar Cadastro</button>
+                <!-- Divisor Inferior com Opção de Exclusão Se Estiver em Modo Edição -->
+                <div class="flex justify-between items-center pt-2 border-t border-slate-700/50">
+                    <div>
+                        <button type="button" id="btnExcluirTecnico" onclick="excluirTecnicoPerfil()" class="hidden px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors">Excluir Técnico</button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="fecharModalCadastro()" class="px-4 py-2 bg-slate-700 text-slate-300 font-bold rounded-lg hover:bg-slate-600">Cancelar</button>
+                        <button type="submit" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500">Salvar Cadastro</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -354,6 +369,30 @@
         let expandedTechLogins = new Set(); 
         let exibirMesCompleto = false; 
         let painelEmpresasExpandido = false; 
+
+        // Contador global de requisições de segundo plano
+        let backgroundUploadsQueueSize = 0;
+
+        // Atualiza a visualização do badge pulsante de sincronização no topo da tela
+        function atualizarStatusProgressoFundo() {
+            const container = document.getElementById('statusSincronizacaoFundo');
+            const txt = document.getElementById('qtdPendentesFundo');
+            if (backgroundUploadsQueueSize > 0) {
+                container.classList.remove('hidden');
+                txt.innerText = backgroundUploadsQueueSize;
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        // Impede que o usuário feche a página por acidente durante uploads em background
+        window.addEventListener('beforeunload', (e) => {
+            if (backgroundUploadsQueueSize > 0) {
+                e.preventDefault();
+                e.returnValue = 'Há alterações sendo gravadas no banco de dados. Se sair agora, algumas frequências podem não ser salvas.';
+                return e.returnValue;
+            }
+        });
 
         // --- SISTEMA DE REQUISIÇÃO ROBUSTA COM RETENTATIVAS (RETRIES) ---
         // Garante que falhas temporárias de rede não causem omissões ao cadastrar em lote
@@ -577,6 +616,36 @@
             }
         }
 
+        // Sincronização silenciosa em background (sem exibir telas de carregamento)
+        async function carregarPainelSincronizadoSilencioso() {
+            const configData = obterDataFiltro();
+            const urlTecnicos = `/api/equipe?$filter=PartitionKey eq 'PERFIL'`;
+            const urlOcorrencias = `/api/equipe?$filter=PartitionKey eq '${configData.partitionKey}'`;
+
+            try {
+                const [resTecs, resOcor] = await Promise.all([
+                    fetch(urlTecnicos, { headers: { 'Accept': 'application/json' } }),
+                    fetch(urlOcorrencias, { headers: { 'Accept': 'application/json' } })
+                ]);
+
+                if (resTecs.ok) {
+                    const data = await resTecs.json();
+                    listaTecnicosGlobal = data.value || [];
+                }
+                
+                if (resOcor.ok) {
+                    const data = await resOcor.json();
+                    listaOcorrenciasGlobal = data.value || [];
+                }
+
+                popularFiltrosDinamicos();
+                renderizarGridFrequencia();
+                calcularMetricasDia();
+            } catch (err) {
+                console.error("Erro na sincronização silenciosa:", err);
+            }
+        }
+
         function popularFiltrosDinamicos() {
             const selectEmpresa = document.getElementById('filtroEmpresa');
             const empresaSelecionada = selectEmpresa.value;
@@ -601,11 +670,19 @@
 
         function calcularMetricasDia() {
             const emp = document.getElementById('filtroEmpresa').value;
+            const queryPesquisa = document.getElementById('filtroPesquisa').value.trim().toLowerCase();
 
             const tecnicosAtivosFiltrados = listaTecnicosGlobal.filter(t => {
                 if (t.Status !== "Ativo") return false;
                 if (emp !== "Todos" && t.Empresa !== emp) return false;
                 if (!selectedDddsSet.has(t.DDD)) return false;
+
+                // Integração de Pesquisa por Nome ou Login (RowKey) nos indicadores
+                if (queryPesquisa) {
+                    const nomeMatch = t.Nome ? t.Nome.toLowerCase().includes(queryPesquisa) : false;
+                    const loginMatch = t.RowKey ? t.RowKey.toLowerCase().includes(queryPesquisa) : false;
+                    if (!nomeMatch && !loginMatch) return false;
+                }
                 return true;
             });
 
@@ -697,6 +774,42 @@
             document.getElementById('subIndicadorAusentes').innerText = `Férias: (${feriasHoje}) | Atestados: (${atestadoHoje}) | Faltas: (${faltasHoje})`;
         }
 
+        // --- SISTEMA OPTIMISTIC UI: ATUALIZA MEMÓRIA LOCAL DE FORMA INSTANTÂNEA ---
+        function atualizarFrequenciaLocalmente(login, status, dInicio, dFim, comentario) {
+            const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
+            if (!tec) return;
+
+            const dIniDate = parseDateMidnight(dInicio);
+            const dFimDate = parseDateMidnight(dFim);
+
+            // Filtra e remove qualquer escala preexistente que se sobreponha a estas datas
+            listaOcorrenciasGlobal = listaOcorrenciasGlobal.filter(oc => {
+                if (oc.Login !== login) return true;
+                const ocIni = parseDateMidnight(oc.DataInicio);
+                const ocFim = parseDateMidnight(oc.DataFim);
+                const sobrepoe = (dIniDate <= ocFim && dFimDate >= ocIni);
+                return !sobrepoe;
+            });
+
+            // Se for diferente de Limpar, insere na memória imediata para o usuário ver
+            if (status !== "Limpar") {
+                const partition = dInicio.replace(/-/g, '').substring(0, 6);
+                const rKey = `${login}_${status}_${dInicio.replace(/-/g, '')}`;
+
+                listaOcorrenciasGlobal.push({
+                    Login: login,
+                    Nome: tec.Nome,
+                    Empresa: tec.Empresa,
+                    Ocorrencia: status,
+                    DataInicio: dInicio,
+                    DataFim: dFim,
+                    Comentario: comentario || "",
+                    PartitionKey: partition,
+                    RowKey: rKey
+                });
+            }
+        }
+
         // --- ATRIBUIR PRESENÇA EM MASSA ---
         async function atribuirPresencaMassa(dataStr) {
             const emp = document.getElementById('filtroEmpresa').value;
@@ -714,53 +827,67 @@
                 return;
             }
 
-            if (!confirm(`Deseja atribuir presença automática para os ${tecnicosAlvo.length} técnicos ativos no dia ${dataStr.split('-').reverse().join('/')}?`)) {
-                return;
-            }
+            // --- PASSO 1: ATUALIZAÇÃO OPTIMISTIC (INSTANTÂNEA NA TELA) ---
+            tecnicosAlvo.forEach(t => {
+                atualizarFrequenciaLocalmente(t.RowKey, "Presente", dataStr, dataStr, "");
+            });
+            renderizarGridFrequencia();
+            calcularMetricasDia();
 
-            document.getElementById('loadingSpinner').classList.remove('hidden');
-            let totalSuccess = 0;
+            // Mensagem de sucesso instantânea após um atraso sutil para garantir a renderização
+            setTimeout(() => {
+                alert("Salvo com sucesso!");
+            }, 50);
 
-            for (let i = 0; i < tecnicosAlvo.length; i++) {
-                const t = tecnicosAlvo[i];
-                const partitionNew = dataStr.replace(/-/g, '').substring(0, 6);
-                const rKeyNew = `${t.RowKey}_Presente_${dataStr.replace(/-/g, '')}`;
+            // --- PASSO 2: FILA DE ENVIOS EM BACKGROUND (EM PARALELO) ---
+            backgroundUploadsQueueSize += tecnicosAlvo.length;
+            atualizarStatusProgressoFundo();
 
-                const corpo = {
-                    Login: t.RowKey,
-                    Nome: t.Nome,
-                    Empresa: t.Empresa,
-                    Ocorrencia: "Presente",
-                    DataInicio: dataStr,
-                    DataFim: dataStr
-                };
+            // Dispara todos os envios de rede em paralelo sem bloquear a interface do usuário
+            (async () => {
+                const envios = tecnicosAlvo.map(async (t) => {
+                    const partitionNew = dataStr.replace(/-/g, '').substring(0, 6);
+                    const rKeyNew = `${t.RowKey}_Presente_${dataStr.replace(/-/g, '')}`;
 
-                const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
+                    const corpo = {
+                        Login: t.RowKey,
+                        Nome: t.Nome,
+                        Empresa: t.Empresa,
+                        Ocorrencia: "Presente",
+                        DataInicio: dataStr,
+                        DataFim: dataStr
+                    };
 
-                try {
-                    const res = await fetchWithRetry(url, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify(corpo)
-                    }, 3, 300);
+                    const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
 
-                    if (res.ok) {
-                        totalSuccess++;
+                    try {
+                        await fetchWithRetry(url, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(corpo)
+                        }, 3, 300);
+                    } catch (err) {
+                        console.error("Erro na presença em massa em background para:", t.Nome, err);
+                    } finally {
+                        backgroundUploadsQueueSize--;
+                        atualizarStatusProgressoFundo();
                     }
-                } catch (err) {
-                    console.error("Erro na presença em massa:", t.Nome, err);
-                }
-            }
+                });
 
-            alert(`Presença em massa concluída para ${totalSuccess} técnicos!`);
-            carregarPainelSincronizado();
+                await Promise.all(envios);
+
+                // Silenciosamente puxa a base consolidada do Azure após finalizar a fila
+                if (backgroundUploadsQueueSize === 0) {
+                    carregarPainelSincronizadoSilencioso();
+                }
+            })();
         }
 
         // --- FUNÇÃO AUXILIAR: GERA LINHA DO TÉCNICO NO GRID ---
-        function gerarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje) {
+        function generarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje) {
             const isExpanded = expandedTechLogins.has(t.RowKey);
             const localInfo = t.Cidade ? `${t.Empresa} - ${t.Cidade}` : t.Empresa;
             
@@ -866,6 +993,7 @@
             }
 
             const emp = document.getElementById('filtroEmpresa').value;
+            const queryPesquisa = document.getElementById('filtroPesquisa').value.trim().toLowerCase();
 
             let headerHTML = `
                 <tr>
@@ -899,6 +1027,13 @@
             const tecnicosFiltrados = listaTecnicosGlobal.filter(t => {
                 if (emp !== "Todos" && t.Empresa !== emp) return false;
                 if (!selectedDddsSet.has(t.DDD)) return false;
+
+                // Nova Regra: Busca pelo Nome ou pelo Login (RowKey) do técnico
+                if (queryPesquisa) {
+                    const nomeMatch = t.Nome ? t.Nome.toLowerCase().includes(queryPesquisa) : false;
+                    const loginMatch = t.RowKey ? t.RowKey.toLowerCase().includes(queryPesquisa) : false;
+                    if (!nomeMatch && !loginMatch) return false;
+                }
                 return true;
             });
 
@@ -981,7 +1116,44 @@
             document.getElementById('tituloModalCadastro').innerText = "Registrar Novo Técnico";
             document.getElementById('formTecnico').reset();
             document.getElementById('tecLogin').disabled = false;
+            document.getElementById('btnExcluirTecnico').classList.add('hidden'); // Oculta o botão de exclusão para novos perfis
             document.getElementById('modalCadastro').classList.remove('hidden');
+        }
+
+        // --- SISTEMA DE EXCLUSÃO DE TÉCNICO ---
+        async function excluirTecnicoPerfil() {
+            const login = document.getElementById('tecLogin').value.trim().toUpperCase();
+            if (!login) return;
+
+            const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
+            if (!tec) return;
+
+            if (!confirm(`Tem certeza que deseja excluir permanentemente o técnico ${tec.Nome} (${login})? Esta ação não pode ser desfeita.`)) {
+                return;
+            }
+
+            document.getElementById('loadingSpinner').classList.remove('hidden');
+
+            try {
+                const url = `/api/equipe?PartitionKey=PERFIL&RowKey=${login}`;
+                const res = await fetchWithRetry(url, {
+                    method: 'DELETE',
+                    headers: { 'If-Match': '*' }
+                }, 3, 300);
+
+                if (res.ok) {
+                    alert("Salvo com sucesso!");
+                    fecharModalCadastro();
+                    carregarPainelSincronizado();
+                } else {
+                    const txt = await res.text();
+                    throw new Error(txt);
+                }
+            } catch (err) {
+                alert("Erro ao excluir técnico: " + err.message);
+            } finally {
+                document.getElementById('loadingSpinner').classList.add('hidden');
+            }
         }
 
         function fecharModalCadastro() {
@@ -1063,79 +1235,90 @@
             const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
             if (!tec) return;
 
-            if (status === "Limpar") {
-                if (rowKeyExistente) {
-                    const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
-                    await apagarRegistroAzure('EquipeSPI', partition, rowKeyExistente);
-                } else {
-                    alert("O dia selecionado já está sem registro.");
-                    fecharModalStatus();
-                    return;
-                }
-            } else {
-                let dInicio = dataAlvo;
-                let dFim = dataAlvo;
+            let dInicio = dataAlvo;
+            let dFim = dataAlvo;
 
-                if (status === "Falta" || status === "Presente") {
-                    dInicio = dataAlvo;
-                    dFim = dataAlvo;
-                } else {
-                    dInicio = document.getElementById('statusDataInicio').value;
-                    dFim = document.getElementById('statusDataFim').value;
-                }
-
-                if (!dInicio || !dFim) {
-                    alert("Período incompleto.");
-                    return;
-                }
-
-                const partitionNew = dInicio.replace(/-/g, '').substring(0, 6);
-                const rKeyNew = `${login}_${status}_${dInicio.replace(/-/g, '')}`;
-
-                if (rowKeyExistente && rowKeyExistente !== rKeyNew) {
-                    const partitionOld = rowKeyExistente.split('_').pop().substring(0, 6);
-                    await apagarRegistroAzure('EquipeSPI', partitionOld, rowKeyExistente);
-                }
-
-                const corpo = {
-                    Login: login,
-                    Nome: tec.Nome,
-                    Empresa: tec.Empresa,
-                    Ocorrencia: status,
-                    DataInicio: dInicio,
-                    DataFim: dFim
-                };
-
-                // Adiciona o comentário caso seja uma falta
-                if (status === "Falta") {
-                    corpo.Comentario = document.getElementById('statusComentario').value.trim();
-                }
-
-                const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
-
-                try {
-                    const res = await fetchWithRetry(url, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify(corpo)
-                    }, 3, 300);
-
-                    if (!res.ok) {
-                        const errorTxt = await res.text();
-                        throw new Error(errorTxt);
-                    }
-                } catch (err) {
-                    alert("Erro ao gravar frequência: " + err.message);
-                    return;
-                }
+            if (status !== "Falta" && status !== "Presente" && status !== "Limpar") {
+                dInicio = document.getElementById('statusDataInicio').value;
+                dFim = document.getElementById('statusDataFim').value;
             }
 
-            alert("Frequência atualizada com sucesso!");
-            fecharModalStatus();
-            carregarPainelSincronizado();
+            if (!dInicio || !dFim) {
+                alert("Período incompleto.");
+                return;
+            }
+
+            const comentario = status === "Falta" ? document.getElementById('statusComentario').value.trim() : "";
+
+            // --- PASSO 1: ATUALIZAÇÃO OPTIMISTIC (IMEDIATA NA TELA) ---
+            atualizarFrequenciaLocalmente(login, status, dInicio, dFim, comentario);
+            renderizarGridFrequencia();
+            calcularMetricasDia();
+            fecharModalStatus(); // Fecha o formulário na hora para a experiência ser instantânea
+
+            // Alerta simplificado de confirmação após o fluxo de renderização
+            setTimeout(() => {
+                alert("Salvo com sucesso!");
+            }, 50);
+
+            // --- PASSO 2: FILA DE ENVIOS EM BACKGROUND ---
+            backgroundUploadsQueueSize++;
+            atualizarStatusProgressoFundo();
+
+            // Dispara a promessa assíncrona em background
+            (async () => {
+                try {
+                    if (status === "Limpar") {
+                        if (rowKeyExistente) {
+                            const partition = rowKeyExistente.split('_').pop().substring(0, 6); 
+                            await apagarRegistroAzure('EquipeSPI', partition, rowKeyExistente);
+                        }
+                    } else {
+                        const partitionNew = dInicio.replace(/-/g, '').substring(0, 6);
+                        const rKeyNew = `${login}_${status}_${dInicio.replace(/-/g, '')}`;
+
+                        if (rowKeyExistente && rowKeyExistente !== rKeyNew) {
+                            const partitionOld = rowKeyExistente.split('_').pop().substring(0, 6);
+                            await apagarRegistroAzure('EquipeSPI', partitionOld, rowKeyExistente);
+                        }
+
+                        const corpo = {
+                            Login: login,
+                            Nome: tec.Nome,
+                            Empresa: tec.Empresa,
+                            Ocorrencia: status,
+                            DataInicio: dInicio,
+                            DataFim: dFim
+                        };
+
+                        if (status === "Falta") {
+                            corpo.Comentario = comentario;
+                        }
+
+                        const url = `/api/equipe?PartitionKey=${partitionNew}&RowKey=${rKeyNew}`;
+
+                        await fetchWithRetry(url, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(corpo)
+                        }, 3, 300);
+                    }
+                } catch (err) {
+                    console.error("Erro ao sincronizar escala em background:", err);
+                    alert(`Falha de rede ao gravar frequência de ${tec.Nome}. A escala local poderá ser resetada se você recarregar agora.`);
+                } finally {
+                    backgroundUploadsQueueSize--;
+                    atualizarStatusProgressoFundo();
+                    
+                    // Sincroniza silenciosamente ao esvaziar a fila
+                    if (backgroundUploadsQueueSize === 0) {
+                        carregarPainelSincronizadoSilencioso();
+                    }
+                }
+            })();
         }
 
         async function apagarRegistroAzure(tabela, partition, rowKey) {
@@ -1164,6 +1347,9 @@
             document.getElementById('tecDdd').value = tec.DDD;
             document.getElementById('tecTelefone').value = tec.Telefone || "";
             document.getElementById('tecStatus').value = tec.Status;
+            
+            // Exibe o botão de exclusão de perfil para técnicos existentes
+            document.getElementById('btnExcluirTecnico').classList.remove('hidden');
             
             document.getElementById('modalCadastro').classList.remove('hidden');
         }
@@ -1204,7 +1390,7 @@
                 }, 3, 300);
 
                 if (res.ok) {
-                    alert("Técnico salvo com sucesso!");
+                    alert("Salvo com sucesso!");
                     fecharModalCadastro();
                     carregarPainelSincronizado();
                 } else {
