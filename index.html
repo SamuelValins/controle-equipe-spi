@@ -467,9 +467,13 @@
             }, 300);
         }
 
+        // Tratamento robusto para parsing de datas com verificação de tipo e conteúdo
         function parseDateMidnight(dateStr) {
-            if (!dateStr) return null;
-            const [year, month, day] = dateStr.split('-').map(Number);
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return null;
+            const [year, month, day] = parts.map(Number);
+            if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
             return new Date(year, month - 1, day);
         }
 
@@ -678,7 +682,7 @@
             const tecnicosAtivosFiltrados = listaTecnicosGlobal.filter(t => {
                 if (t.Status !== "Ativo") return false;
                 if (emp !== "Todos" && t.Empresa !== emp) return false;
-                if (!selectedDddsSet.has(t.DDD)) return false;
+                if (!selectedDddsSet.has(String(t.DDD || ""))) return false;
 
                 // Integração de Pesquisa por Nome ou Login (RowKey) nos indicadores
                 if (queryPesquisa) {
@@ -730,6 +734,7 @@
                     if (oc.Login !== login) return false;
                     const dIni = parseDateMidnight(oc.DataInicio);
                     const dFim = parseDateMidnight(oc.DataFim);
+                    if (!dIni || !dFim) return false;
                     return (hojeDate >= dIni && dFim >= hojeDate);
                 });
 
@@ -762,7 +767,7 @@
             const painelEmpresas = document.getElementById('painelResumoEmpresas');
             painelEmpresas.innerHTML = '';
 
-            Object.entries(resumoEmpresas).sort((a,b) => a[0].localeCompare(b[0])).forEach(([nomeEmp, stats]) => {
+            Object.entries(resumoEmpresas).sort((a,b) => String(a[0] || "").localeCompare(String(b[0] || ""))).forEach(([nomeEmp, stats]) => {
                 painelEmpresas.innerHTML += `
                     <div class="bg-slate-800/40 border border-slate-700/50 p-4 rounded-xl shadow-md space-y-2">
                         <h4 class="font-black text-white text-xs uppercase border-b border-slate-700/50 pb-1.5 flex justify-between items-center">
@@ -805,6 +810,7 @@
                 if (oc.Login !== login) return true;
                 const ocIni = parseDateMidnight(oc.DataInicio);
                 const ocFim = parseDateMidnight(oc.DataFim);
+                if (!ocIni || !ocFim) return true;
                 const sobrepoe = (dIniDate <= ocFim && dFimDate >= ocIni);
                 return !sobrepoe;
             });
@@ -836,7 +842,7 @@
             const tecnicosAlvo = listaTecnicosGlobal.filter(t => {
                 if (t.Status !== "Ativo") return false;
                 if (t.Empresa !== emp) return false;
-                if (!selectedDddsSet.has(t.DDD)) return false;
+                if (!selectedDddsSet.has(String(t.DDD || ""))) return false;
                 return true;
             });
 
@@ -909,24 +915,28 @@
             const isExpanded = expandedTechLogins.has(t.RowKey);
             const localInfo = t.Cidade ? `${t.Empresa} - ${t.Cidade}` : t.Empresa;
             
+            // Tratamento estrito contra quebras de linha e caracteres especiais para evitar falha catastrófica de parse HTML
+            const nomeEscaped = String(t.Nome || "").replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\r/g, '');
+            const rowKeyEscaped = String(t.RowKey || "").replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\r/g, '');
+
             let rowHTML = `
                 <tr class="hover:bg-slate-800/20 transition-all border-b border-slate-800">
-                    <td class="p-2 border-r border-slate-800 sticky-col cursor-pointer" onclick="toggleDetalhesTecnico('${t.RowKey}')">
+                    <td class="p-2 border-r border-slate-800 sticky-col cursor-pointer" onclick="toggleDetalhesTecnico('${rowKeyEscaped}')">
                         <div class="flex items-center justify-between">
                             <div>
                                 <span class="text-[10px] opacity-40 mr-1">${isExpanded ? '▼' : '▶'}</span>
-                                <strong class="text-white text-xs hover:underline uppercase">${t.Nome}</strong>
-                                <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${localInfo} (DDD ${t.DDD})</div>
+                                <strong class="text-white text-xs hover:underline uppercase">${t.Nome || ""}</strong>
+                                <div class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">${localInfo || ""} (DDD ${t.DDD || ""})</div>
                             </div>
                         </div>
                         ${isExpanded ? `
                             <div class="mt-2 pt-2 border-t border-slate-700/50 text-[10px] text-slate-300 space-y-2 animate-fade-in bg-slate-950/40 p-2 rounded-lg" onclick="event.stopPropagation()">
-                                <div><strong>Login:</strong> ${t.RowKey}</div>
+                                <div><strong>Login:</strong> ${t.RowKey || ""}</div>
                                 <div><strong>Cidade:</strong> ${t.Cidade || "Não informada"}</div>
                                 <div><strong>Celular:</strong> ${t.Telefone || "Não informado"}</div>
                                 <div class="flex gap-1 pt-1">
-                                    <button onclick="copiarDadosTecnico('${t.Nome}', '${t.RowKey}', '${t.Cidade}', '${t.DDD}', '${t.Telefone}', this)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">📋 Copiar</button>
-                                    <button onclick="preencherEdicao('${t.RowKey}')" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">✏️ Editar Perfil</button>
+                                    <button onclick="copiarDadosTecnico('${nomeEscaped}', '${rowKeyEscaped}', '${(t.Cidade || "").replace(/'/g, "\\'")}', '${t.DDD || ""}', '${t.Telefone || ""}', this)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">📋 Copiar</button>
+                                    <button onclick="preencherEdicao('${rowKeyEscaped}')" class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-2 py-1 rounded text-[8px] uppercase">✏️ Editar Perfil</button>
                                 </div>
                             </div>
                         ` : ''}
@@ -956,6 +966,7 @@
                         if (oc.Login !== t.RowKey) return false;
                         const dIni = parseDateMidnight(oc.DataInicio);
                         const dFim = parseDateMidnight(oc.DataFim);
+                        if (!dIni || !dFim) return false;
                         return (diaDate >= dIni && dFim >= diaDate);
                     });
 
@@ -986,11 +997,15 @@
                     }
                 }
 
-                const comentarioTxt = occurrenceObject && occurrenceObject.Comentario ? occurrenceObject.Comentario.replace(/'/g, "\\'") : "";
+                // Limpeza estrita contra quebras de linha que invalidam a string de parâmetro no clique
+                const comentarioTxt = occurrenceObject && occurrenceObject.Comentario ? 
+                    occurrenceObject.Comentario.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\r/g, '') : "";
                 
+                const rowKeyExistenteEscaped = occurrenceObject ? String(occurrenceObject.RowKey || '').replace(/'/g, "\\'") : '';
+
                 const clickAction = isDomingo ? 
                     `alert('Domingo não trabalhamos!')` : 
-                    `abrirModalStatus('${t.RowKey}', '${t.Nome}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${occurrenceObject ? occurrenceObject.RowKey : ''}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}', '${comentarioTxt}')`;
+                    `abrirModalStatus('${rowKeyEscaped}', '${nomeEscaped}', '${diaFmt}', '${occurrenceObject ? occurrenceObject.Ocorrencia : 'Presente'}', '${rowKeyExistenteEscaped}', '${occurrenceObject ? occurrenceObject.DataInicio : ''}', '${occurrenceObject ? occurrenceObject.DataFim : ''}', '${comentarioTxt}')`;
 
                 rowHTML += `
                     <td class="p-2 border-r border-slate-800 text-center ${bgClasse} text-[10px]" onclick="${clickAction}">
@@ -1053,7 +1068,7 @@
 
             const tecnicosFiltrados = listaTecnicosGlobal.filter(t => {
                 if (emp !== "Todos" && t.Empresa !== emp) return false;
-                if (!selectedDddsSet.has(t.DDD)) return false;
+                if (!selectedDddsSet.has(String(t.DDD || ""))) return false;
 
                 // Nova Regra: Busca pelo Nome ou pelo Login (RowKey) do técnico
                 if (queryPesquisa) {
@@ -1092,7 +1107,7 @@
                 const cidadesOrdenadas = Object.keys(gruposPorCidade).sort((a, b) => {
                     if (a === "SEM CIDADE INFORMADA") return 1;
                     if (b === "SEM CIDADE INFORMADA") return -1;
-                    return a.localeCompare(b);
+                    return String(a || "").localeCompare(String(b || ""));
                 });
 
                 cidadesOrdenadas.forEach(cidade => {
@@ -1109,14 +1124,14 @@
                     `;
 
                     // Ordena os técnicos daquela cidade por nome
-                    gruposPorCidade[cidade].sort((a, b) => a.Nome.localeCompare(b.Nome)).forEach(t => {
-                        corpoHTML += gerarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje);
+                    gruposPorCidade[cidade].sort((a, b) => String(a.Nome || "").localeCompare(String(b.Nome || ""))).forEach(t => {
+                        corpoHTML += generarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje);
                     });
                 });
             } else {
-                // Sem agrupamento (filtro de empresa em "Todos") - ordena por Nome globalmente
-                tecnicosFiltrados.sort((a,b) => a.Nome.localeCompare(b.Nome)).forEach(t => {
-                    corpoHTML += gerarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje);
+                // Sem agrupamento (filtro de empresa em "Todos") - ordena por Nome globalmente de forma segura
+                tecnicosFiltrados.sort((a, b) => String(a.Nome || "").localeCompare(String(b.Nome || ""))).forEach(t => {
+                    corpoHTML += generarLinhaTecnicoGrid(t, totalDiasExibir, configData, hoje);
                 });
             }
 
@@ -1128,6 +1143,27 @@
         // Exclusivo para abrir painel de configurações gerais
         function abrirModalConfiguracoes() {
             document.getElementById('modalConfiguracoes').classList.remove('hidden');
+        }
+
+        // --- EDICAO E CADASTRO DE PERFIL (EquipeSPI) ---
+        function preencherEdicao(login) {
+            const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
+            if (!tec) return;
+
+            document.getElementById('tituloModalCadastro').innerText = "Editar Técnico";
+            document.getElementById('tecNome').value = tec.Nome;
+            document.getElementById('tecLogin').value = tec.RowKey;
+            document.getElementById('tecLogin').disabled = true; 
+            document.getElementById('tecEmpresa').value = tec.Empresa;
+            document.getElementById('tecCidade').value = tec.Cidade || "";
+            document.getElementById('tecDdd').value = tec.DDD;
+            document.getElementById('tecTelefone').value = tec.Telefone || "";
+            document.getElementById('tecStatus').value = tec.Status;
+            
+            // Exibe o botão de exclusão de perfil para técnicos existentes
+            document.getElementById('btnExcluirTecnico').classList.remove('hidden');
+            
+            document.getElementById('modalCadastro').classList.remove('hidden');
         }
 
         function fecharModalConfiguracoes() {
@@ -1367,27 +1403,6 @@
             } catch (err) {
                 console.error("Erro ao deletar:", err);
             }
-        }
-
-        // --- EDICAO E CADASTRO DE PERFIL (EquipeSPI) ---
-        function preencherEdicao(login) {
-            const tec = listaTecnicosGlobal.find(t => t.RowKey === login);
-            if (!tec) return;
-
-            document.getElementById('tituloModalCadastro').innerText = "Editar Técnico";
-            document.getElementById('tecNome').value = tec.Nome;
-            document.getElementById('tecLogin').value = tec.RowKey;
-            document.getElementById('tecLogin').disabled = true; 
-            document.getElementById('tecEmpresa').value = tec.Empresa;
-            document.getElementById('tecCidade').value = tec.Cidade || "";
-            document.getElementById('tecDdd').value = tec.DDD;
-            document.getElementById('tecTelefone').value = tec.Telefone || "";
-            document.getElementById('tecStatus').value = tec.Status;
-            
-            // Exibe o botão de exclusão de perfil para técnicos existentes
-            document.getElementById('btnExcluirTecnico').classList.remove('hidden');
-            
-            document.getElementById('modalCadastro').classList.remove('hidden');
         }
 
         async function salvarTecnico(e) {
